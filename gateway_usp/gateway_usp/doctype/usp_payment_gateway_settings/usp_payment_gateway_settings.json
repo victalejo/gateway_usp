@@ -1,0 +1,201 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "creation": "2024-07-06 10:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+     "enabled_section",
+     "is_enabled",
+     "environment",
+     "column_break_3",
+     "merchant_id",
+     "secret_key",
+     "terminal_id",
+     "credentials_section",
+     "webhook_url",
+     "column_break_8",
+     "last_sync",
+     "payment_config_section",
+     "default_currency",
+     "payment_timeout",
+     "column_break_12",
+     "auto_capture",
+     "send_notifications",
+     "urls_section",
+     "success_url",
+     "column_break_16",
+     "failure_url",
+     "cancel_url"
+    ],
+    "fields": [
+     {
+      "fieldname": "enabled_section",
+      "fieldtype": "Section Break",
+      "label": "Configuración General"
+     },
+     {
+      "default": "0",
+      "fieldname": "is_enabled",
+      "fieldtype": "Check",
+      "label": "Habilitado",
+      "description": "Habilitar el gateway de pagos USP"
+     },
+     {
+      "default": "SANDBOX",
+      "fieldname": "environment",
+      "fieldtype": "Select",
+      "label": "Ambiente",
+      "options": "SANDBOX\nPRODUCTION",
+      "reqd": 1,
+      "description": "Seleccionar ambiente de pruebas o producción"
+     },
+     {
+      "fieldname": "column_break_3",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "merchant_id",
+      "fieldtype": "Data",
+      "label": "Merchant ID",
+      "reqd": 1,
+      "description": "ID del comerciante proporcionado por Sigma"
+     },
+     {
+      "fieldname": "secret_key",
+      "fieldtype": "Password",
+      "label": "Secret Key",
+      "reqd": 1,
+      "description": "Clave secreta para autenticación"
+     },
+     {
+      "fieldname": "terminal_id",
+      "fieldtype": "Data",
+      "label": "Terminal ID",
+      "description": "ID del terminal (requerido para transacciones)"
+     },
+     {
+      "fieldname": "credentials_section",
+      "fieldtype": "Section Break",
+      "label": "Configuración de Webhooks"
+     },
+     {
+      "fieldname": "webhook_url",
+      "fieldtype": "Data",
+      "label": "Webhook URL",
+      "read_only": 1,
+      "description": "URL generada automáticamente para webhooks"
+     },
+     {
+      "fieldname": "column_break_8",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "last_sync",
+      "fieldtype": "Datetime",
+      "label": "Última Sincronización",
+      "read_only": 1
+     },
+     {
+      "fieldname": "payment_config_section",
+      "fieldtype": "Section Break",
+      "label": "Configuración de Pagos"
+     },
+     {
+      "default": "USD",
+      "fieldname": "default_currency",
+      "fieldtype": "Link",
+      "label": "Moneda por Defecto",
+      "options": "Currency"
+     },
+     {
+      "default": "300",
+      "fieldname": "payment_timeout",
+      "fieldtype": "Int",
+      "label": "Timeout de Pago (segundos)",
+      "description": "Tiempo límite para completar el pago"
+     },
+     {
+      "fieldname": "column_break_12",
+      "fieldtype": "Column Break"
+     },
+     {
+      "default": "1",
+      "fieldname": "auto_capture",
+      "fieldtype": "Check",
+      "label": "Captura Automática",
+      "description": "Capturar automáticamente los pagos autorizados"
+     },
+     {
+      "default": "1",
+      "fieldname": "send_notifications",
+      "fieldtype": "Check",
+      "label": "Enviar Notificaciones",
+      "description": "Enviar notificaciones por email de transacciones"
+     },
+     {
+      "fieldname": "urls_section",
+      "fieldtype": "Section Break",
+      "label": "URLs de Redirección"
+     },
+     {
+      "fieldname": "success_url",
+      "fieldtype": "Data",
+      "label": "URL de Éxito",
+      "description": "URL de redirección cuando el pago es exitoso"
+     },
+     {
+      "fieldname": "column_break_16",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "failure_url",
+      "fieldtype": "Data",
+      "label": "URL de Fallo",
+      "description": "URL de redirección cuando el pago falla"
+     },
+     {
+      "fieldname": "cancel_url",
+      "fieldtype": "Data",
+      "label": "URL de Cancelación",
+      "description": "URL de redirección cuando el usuario cancela"
+     }
+    ],
+    "has_web_view": 0,
+    "hide_heading": 0,
+    "hide_toolbar": 0,
+    "issingle": 1,
+    "istable": 0,
+    "max_attachments": 0,
+    "modified": "2024-07-06 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Gateway USP",
+    "name": "USP Payment Gateway Settings",
+    "owner": "Administrator",
+    "permissions": [
+     {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "print": 1,
+      "read": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+     },
+     {
+      "read": 1,
+      "role": "Accounts Manager",
+      "write": 1
+     }
+    ],
+    "quick_entry": 1,
+    "read_only": 0,
+    "read_only_onload": 0,
+    "show_name_in_global_search": 0,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1,
+    "track_seen": 0
+   }

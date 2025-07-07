@@ -1,0 +1,209 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "field:transaction_id",
+    "creation": "2024-07-06 10:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+     "transaction_details_section",
+     "transaction_id",
+     "reference_doctype",
+     "reference_docname",
+     "column_break_4",
+     "customer",
+     "amount",
+     "currency",
+     "status",
+     "payment_details_section",
+     "payment_method",
+     "card_last_four",
+     "column_break_10",
+     "gateway_response_code",
+     "gateway_message",
+     "timestamps_section",
+     "created_at",
+     "updated_at",
+     "column_break_14",
+     "processed_at",
+     "completed_at",
+     "response_data_section",
+     "response_data",
+     "webhook_data",
+     "error_message"
+    ],
+    "fields": [
+     {
+      "fieldname": "transaction_details_section",
+      "fieldtype": "Section Break",
+      "label": "Detalles de la Transacción"
+     },
+     {
+      "fieldname": "transaction_id",
+      "fieldtype": "Data",
+      "label": "Transaction ID",
+      "unique": 1,
+      "reqd": 1
+     },
+     {
+      "fieldname": "reference_doctype",
+      "fieldtype": "Link",
+      "label": "Reference DocType",
+      "options": "DocType"
+     },
+     {
+      "fieldname": "reference_docname",
+      "fieldtype": "Dynamic Link",
+      "label": "Reference Document",
+      "options": "reference_doctype"
+     },
+     {
+      "fieldname": "column_break_4",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "customer",
+      "fieldtype": "Link",
+      "label": "Customer",
+      "options": "Customer"
+     },
+     {
+      "fieldname": "amount",
+      "fieldtype": "Currency",
+      "label": "Amount",
+      "precision": "2",
+      "reqd": 1
+     },
+     {
+      "fieldname": "currency",
+      "fieldtype": "Link",
+      "label": "Currency",
+      "options": "Currency",
+      "default": "USD"
+     },
+     {
+      "default": "Pending",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Pending\nAuthorized\nCompleted\nFailed\nCancelled\nRefunded\nPartially Refunded",
+      "reqd": 1
+     },
+     {
+      "fieldname": "payment_details_section",
+      "fieldtype": "Section Break",
+      "label": "Detalles del Pago"
+     },
+     {
+      "fieldname": "payment_method",
+      "fieldtype": "Data",
+      "label": "Payment Method",
+      "read_only": 1
+     },
+     {
+      "fieldname": "card_last_four",
+      "fieldtype": "Data",
+      "label": "Card Last Four",
+      "read_only": 1
+     },
+     {
+      "fieldname": "column_break_10",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "gateway_response_code",
+      "fieldtype": "Data",
+      "label": "Gateway Response Code",
+      "read_only": 1
+     },
+     {
+      "fieldname": "gateway_message",
+      "fieldtype": "Text",
+      "label": "Gateway Message",
+      "read_only": 1
+     },
+     {
+      "fieldname": "timestamps_section",
+      "fieldtype": "Section Break",
+      "label": "Fechas y Horarios"
+     },
+     {
+      "fieldname": "created_at",
+      "fieldtype": "Datetime",
+      "label": "Created At",
+      "default": "Now"
+     },
+     {
+      "fieldname": "updated_at",
+      "fieldtype": "Datetime",
+      "label": "Updated At"
+     },
+     {
+      "fieldname": "column_break_14",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "processed_at",
+      "fieldtype": "Datetime",
+      "label": "Processed At"
+     },
+     {
+      "fieldname": "completed_at",
+      "fieldtype": "Datetime",
+      "label": "Completed At"
+     },
+     {
+      "fieldname": "response_data_section",
+      "fieldtype": "Section Break",
+      "label": "Datos de Respuesta",
+      "collapsible": 1
+     },
+     {
+      "fieldname": "response_data",
+      "fieldtype": "JSON",
+      "label": "Response Data"
+     },
+     {
+      "fieldname": "webhook_data",
+      "fieldtype": "JSON",
+      "label": "Webhook Data"
+     },
+     {
+      "fieldname": "error_message",
+      "fieldtype": "Text",
+      "label": "Error Message"
+     }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2024-07-06 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Gateway USP",
+    "name": "USP Transaction",
+    "owner": "Administrator",
+    "permissions": [
+     {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "print": 1,
+      "read": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+     },
+     {
+      "read": 1,
+      "role": "Accounts Manager",
+      "write": 1
+     },
+     {
+      "read": 1,
+      "role": "Sales User"
+     }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+   }
