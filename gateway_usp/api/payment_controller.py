@@ -188,3 +188,43 @@ def create_usp_customer(customer_data):
             "success": False,
             "error": str(e)
         }
+
+@frappe.whitelist()
+def sync_pending_transactions():
+    """Sincronizar transacciones pendientes (ejecutado cada hora)"""
+    try:
+        # Obtener transacciones pendientes de más de 10 minutos
+        pending_transactions = frappe.get_all(
+            "USP Transaction",
+            filters={
+                "status": "Pending",
+                "created_at": ["<", frappe.utils.add_minutes(frappe.utils.now(), -10)]
+            },
+            fields=["name", "transaction_id"]
+        )
+        
+        for transaction in pending_transactions:
+            # Consultar estado en XpressPago
+            # Implementar lógica de sincronización
+            pass
+            
+    except Exception as e:
+        frappe.log_error(f"Error sincronizando transacciones: {str(e)}")
+
+@frappe.whitelist()
+def cleanup_old_transactions():
+    """Limpiar transacciones antiguas (ejecutado diariamente)"""
+    try:
+        # Eliminar logs de transacciones de más de 90 días
+        old_date = frappe.utils.add_days(frappe.utils.now(), -90)
+        
+        frappe.db.sql("""
+            DELETE FROM `tabUSP Transaction`
+            WHERE created_at < %s
+            AND status IN ('Cancelled', 'Failed')
+        """, (old_date,))
+        
+        frappe.db.commit()
+        
+    except Exception as e:
+        frappe.log_error(f"Error limpiando transacciones: {str(e)}")

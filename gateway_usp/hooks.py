@@ -1,5 +1,3 @@
-# gateway_usp/hooks.py
-
 from . import __version__ as app_version
 
 app_name = "gateway_usp"
@@ -21,18 +19,9 @@ doctype_js = {
     "Payment Entry": "public/js/usp_payment_gateway.js"
 }
 
-# Hooks para API
-override_whitelisted_methods = {
-    "gateway_usp.api.payment_controller.process_payment": "gateway_usp.api.payment_controller.process_payment",
-    "gateway_usp.api.payment_controller.webhook_handler": "gateway_usp.api.payment_controller.webhook_handler"
-}
-
 # Hooks para instalación
 after_install = "gateway_usp.install.after_install"
 before_uninstall = "gateway_usp.install.before_uninstall"
-
-# Hooks para inicialización
-boot_session = "gateway_usp.boot.boot_session"
 
 # Fixtures
 fixtures = [
@@ -42,8 +31,24 @@ fixtures = [
             "name": ["in", [
                 "Payment Request-usp_payment_method",
                 "Payment Entry-usp_transaction_id",
-                "Sales Invoice-usp_payment_gateway"
+                "Sales Invoice-usp_payment_gateway",
+                "Customer-usp_customer_token"
             ]]
         }
     }
 ]
+
+# Website
+website_route_rules = [
+    {"from_route": "/usp-payment/<path:path>", "to_route": "usp-payment"},
+]
+
+# Scheduler Events
+scheduler_events = {
+    "hourly": [
+        "gateway_usp.api.payment_controller.sync_pending_transactions"
+    ],
+    "daily": [
+        "gateway_usp.api.payment_controller.cleanup_old_transactions"
+    ]
+}
