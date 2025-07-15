@@ -39,6 +39,61 @@ def get_customer_usp_data(customer_name):
         }
     }
 
+def get_valid_payment_request_type():
+    """Obtiene el tipo de Payment Request válido según la configuración del sistema"""
+    try:
+        # Obtener las opciones del campo payment_request_type
+        meta = frappe.get_meta("Payment Request")
+        payment_type_field = meta.get_field("payment_request_type")
+        
+        if payment_type_field and payment_type_field.options:
+            options = payment_type_field.options.split('\n')
+            
+            # Priorizar opciones conocidas
+            if "Interior" in options:
+                return "Interior"
+            elif "Exterior" in options:
+                return "Exterior"
+            elif "Inbound" in options:
+                return "Inbound"
+            else:
+                # Usar la primera opción disponible
+                return options[0].strip()
+        
+        # Fallback por defecto
+        return "Interior"
+        
+    except Exception as e:
+        frappe.log_error(f"Error obteniendo payment_request_type: {str(e)}")
+        return "Interior"  # Valor por defecto basado en el error
+
+@frappe.whitelist()
+def get_payment_request_type_options():
+    """Obtiene las opciones disponibles para payment_request_type"""
+    try:
+        meta = frappe.get_meta("Payment Request")
+        payment_type_field = meta.get_field("payment_request_type")
+        
+        if payment_type_field and payment_type_field.options:
+            options = [opt.strip() for opt in payment_type_field.options.split('\n') if opt.strip()]
+            return {
+                "success": True,
+                "options": options,
+                "default": options[0] if options else None
+            }
+        
+        return {
+            "success": False,
+            "message": "No se encontraron opciones para payment_request_type"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error obteniendo opciones payment_request_type: {str(e)}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
 @frappe.whitelist()
 def create_payment_request_with_usp(doc, amount, currency="USD"):
     """Crea un Payment Request con USP habilitado"""
@@ -53,9 +108,12 @@ def create_payment_request_with_usp(doc, amount, currency="USD"):
         if not frappe.has_permission("Payment Request", "create"):
             frappe.throw("No tienes permisos para crear Payment Request")
         
+        # Obtener opciones válidas para payment_request_type
+        payment_request_type = get_valid_payment_request_type()
+        
         payment_request = frappe.get_doc({
             "doctype": "Payment Request",
-            "payment_request_type": "Inbound",
+            "payment_request_type": payment_request_type,  # Usar valor dinámico
             "party_type": "Customer",
             "party": doc.customer,
             "reference_doctype": doc.doctype,
@@ -149,7 +207,12 @@ def validate_payment_request_for_usp(payment_request_name):
         if not settings.is_enabled:
             return {"valid": False, "message": "USP Gateway no está habilitado"}
         
-        return {"valid": True, "message": "OK"}
+        # Verificar opciones válidas de payment_request_type
+        type_options = get_payment_request_type_options()
+        if not type_options["success"]:
+            return {"valid": False, "message": "Error verificando tipos de pago disponibles"}
+        
+        return {"valid": True, "message": "OK", "payment_types": type_options["options"]}
         
     except Exception as e:
         frappe.log_error(f"Error validando Payment Request: {str(e)}")
