@@ -10,6 +10,14 @@
      "is_enabled",
      "environment",
      "column_break_3",
+     "use_mock_mode",
+     "croem_credentials_section",
+     "api_key",
+     "access_code",
+     "column_break_croem",
+     "merchant_account_number",
+     "terminal_name",
+     "legacy_credentials_section",
      "merchant_id",
      "secret_key",
      "terminal_id",
@@ -56,24 +64,74 @@
       "fieldtype": "Column Break"
      },
      {
+      "default": "0",
+      "fieldname": "use_mock_mode",
+      "fieldtype": "Check",
+      "label": "Usar Modo Mock",
+      "description": "Habilitar modo mock para testing (no procesa pagos reales)"
+     },
+     {
+      "fieldname": "croem_credentials_section",
+      "fieldtype": "Section Break",
+      "label": "Credenciales CROEM API Token v6.5",
+      "collapsible": 0
+     },
+     {
+      "fieldname": "api_key",
+      "fieldtype": "Password",
+      "label": "API Key",
+      "reqd": 1,
+      "description": "Llave única que identifica al comercio según documentación CROEM"
+     },
+     {
+      "fieldname": "access_code",
+      "fieldtype": "Password",
+      "label": "Access Code",
+      "reqd": 1,
+      "description": "Código de acceso del comercio proporcionado por CROEM"
+     },
+     {
+      "fieldname": "column_break_croem",
+      "fieldtype": "Column Break"
+     },
+     {
+      "fieldname": "merchant_account_number",
+      "fieldtype": "Data",
+      "label": "Merchant Account Number",
+      "reqd": 1,
+      "description": "MID (Merchant ID) provisto por el Banco Adquirente"
+     },
+     {
+      "fieldname": "terminal_name",
+      "fieldtype": "Data",
+      "label": "Terminal Name",
+      "reqd": 1,
+      "description": "TID (Terminal ID) provisto por el Banco Adquirente"
+     },
+     {
+      "fieldname": "legacy_credentials_section",
+      "fieldtype": "Section Break",
+      "label": "Credenciales Legacy (Deprecado)",
+      "collapsible": 1,
+      "collapsible_depends_on": "eval:!doc.api_key"
+     },
+     {
       "fieldname": "merchant_id",
       "fieldtype": "Data",
-      "label": "Merchant ID",
-      "reqd": 1,
-      "description": "ID del comerciante proporcionado por Sigma"
+      "label": "Merchant ID (Legacy)",
+      "description": "ID del comerciante - usar para compatibilidad con versiones anteriores"
      },
      {
       "fieldname": "secret_key",
       "fieldtype": "Password",
-      "label": "Secret Key",
-      "reqd": 1,
-      "description": "Clave secreta para autenticación"
+      "label": "Secret Key (Legacy)",
+      "description": "Clave secreta para autenticación - usar para compatibilidad"
      },
      {
       "fieldname": "terminal_id",
       "fieldtype": "Data",
-      "label": "Terminal ID",
-      "description": "ID del terminal (requerido para transacciones)"
+      "label": "Terminal ID (Legacy)",
+      "description": "ID del terminal legacy - usar para compatibilidad"
      },
      {
       "fieldname": "credentials_section",

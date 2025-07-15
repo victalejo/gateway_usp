@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USP Gateway - Pruebas de Conectividad</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .test-result { 
+            margin: 15px 0; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 4px solid #ddd;
+        }
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border-left-color: #28a745;
+        }
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border-left-color: #dc3545;
+        }
+        .warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            border-left-color: #ffc107;
+        }
+        .info { 
+            background-color: #d1ecf1; 
+            color: #0c5460; 
+            border-left-color: #17a2b8;
+        }
+        .loading {
+            background-color: #e2e3e5;
+            color: #495057;
+            border-left-color: #6c757d;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .btn-test {
+            margin: 5px;
+        }
+        .result-details {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .header-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+        }
+        .status-badge {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-banner">
+        <div class="container">
+            <h1><i class="fas fa-network-wired"></i> USP Gateway - Pruebas de Conectividad</h1>
+            <p class="mb-0">Diagnóstico completo basado en documentación CROEM API Token v6.5</p>
+        </div>
+    </div>
+
+    <div class="container mt-4">
+        <!-- Resumen General -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5><i class="fas fa-tachometer-alt"></i> Resumen del Sistema</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <button class="btn btn-success btn-test" onclick="runFullTest()">
+                                    <i class="fas fa-play"></i> Ejecutar Todas las Pruebas
+                                </button>
+                                <button class="btn btn-secondary btn-test" onclick="resetAllTests()">
+                                    <i class="fas fa-redo"></i> Reiniciar
+                                </button>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <div id="overall-status" class="status-badge bg-secondary">
+                                    <i class="fas fa-circle"></i> Sin probar
+                                </div>
+                            </div>
+                        </div>
+                        <div id="full-test-result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test 1: Configuración -->
+        <div class="test-section">
+            <h3><i class="fas fa-cog"></i> 1. Verificación de Configuración</h3>
+            <p class="text-muted">Valida que todos los parámetros necesarios estén configurados correctamente.</p>
+            <button class="btn btn-info btn-test" onclick="testConfiguration()">
+                <i class="fas fa-check-circle"></i> Verificar Configuración
+            </button>
+            <div id="config-result"></div>
+        </div>
+
+        <!-- Test 2: Ping -->
+        <div class="test-section">
+            <h3><i class="fas fa-satellite-dish"></i> 2. Prueba de Conectividad (Ping)</h3>
+            <p class="text-muted">Usa el método Ping de la documentación CROEM para verificar conectividad básica.</p>
+            <button class="btn btn-primary btn-test" onclick="testPing()">
+                <i class="fas fa-wifi"></i> Probar Conectividad
+            </button>
+            <div id="ping-result"></div>
+        </div>
+
+        <!-- Test 3: Widget -->
+        <div class="test-section">
+            <h3><i class="fas fa-credit-card"></i> 3. Prueba de Widget de Tokenización</h3>
+            <p class="text-muted">Verifica que el widget de captura de tarjetas se cargue correctamente.</p>
+            <button class="btn btn-warning btn-test" onclick="testWidget()">
+                <i class="fas fa-window-maximize"></i> Probar Widget
+            </button>
+            <div id="widget-result"></div>
+        </div>
+
+        <!-- Test 4: Token Details -->
+        <div class="test-section">
+            <h3><i class="fas fa-key"></i> 4. Prueba de Detalles de Token</h3>
+            <p class="text-muted">Verifica el método GetTokenDetails de la API CROEM.</p>
+            <button class="btn btn-secondary btn-test" onclick="testTokenDetails()">
+                <i class="fas fa-search"></i> Probar Token Details
+            </button>
+            <div id="token-result"></div>
+        </div>
+
+        <!-- Test 5: Transacción Mock -->
+        <div class="test-section">
+            <h3><i class="fas fa-dollar-sign"></i> 5. Prueba de Transacción</h3>
+            <p class="text-muted">Simula una transacción de prueba usando el método Sale de CROEM.</p>
+            <button class="btn btn-success btn-test" onclick="testTransaction()">
+                <i class="fas fa-money-bill-wave"></i> Probar Transacción
+            </button>
+            <div id="transaction-result"></div>
+        </div>
+
+        <!-- Información Adicional -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="fas fa-info-circle"></i> Información del Sistema</h6>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Documentación:</strong> CROEM API Token v6.5</p>
+                        <p><strong>Ambiente:</strong> <span id="environment-info">Cargando...</span></p>
+                        <p><strong>Timestamp:</strong> <span id="current-time"></span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="fas fa-question-circle"></i> Ayuda</h6>
+                    </div>
+                    <div class="card-body">
+                        <p>Si encuentras errores:</p>
+                        <ul class="small">
+                            <li>Verifica la configuración en USP Payment Gateway Settings</li>
+                            <li>Revisa los logs de error en Error Log</li>
+                            <li>Asegúrate de tener conectividad a internet</li>
+                            <li>Contacta soporte si persisten los problemas</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Variables globales
+        let testResults = {};
+        
+        // Función para mostrar loading
+        function showLoading(elementId, message = "Ejecutando prueba...") {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `
+                <div class="test-result loading">
+                    <i class="fas fa-spinner fa-spin"></i> ${message}
+                </div>
+            `;
+        }
+        
+        // Función para mostrar resultado
+        function showResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            const cssClass = result.success ? 'success' : 'error';
+            const icon = result.success ? 'fa-check-circle' : 'fa-times-circle';
+            
+            let detailsHtml = '';
+            if (result.details) {
+                detailsHtml = `
+                    <div class="result-details">
+                        ${JSON.stringify(result.details, null, 2)}
+                    </div>
+                `;
+            }
+            
+            element.innerHTML = `
+                <div class="test-result ${cssClass}">
+                    <i class="fas ${icon}"></i> <strong>${result.message}</strong>
+                    ${result.error ? `<br><small>Error: ${result.error}</small>` : ''}
+                    ${detailsHtml}
+                </div>
+            `;
+        }
+        
+        // Test de configuración
+        function testConfiguration() {
+            showLoading('config-result', 'Verificando configuración...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.get_usp_configuration",
+                callback: function(r) {
+                    testResults.configuration = r.message;
+                    showResult('config-result', {
+                        success: r.message.success,
+                        message: r.message.message,
+                        error: r.message.errors ? r.message.errors.join(', ') : null,
+                        details: r.message.configuration
+                    });
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    showResult('config-result', {
+                        success: false,
+                        message: 'Error verificando configuración',
+                        error: r.message || 'Error desconocido'
+                    });
+                }
+            });
+        }
+        
+        // Test de ping
+        function testPing() {
+            showLoading('ping-result', 'Probando conectividad...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.test_usp_connectivity",
+                callback: function(r) {
+                    testResults.ping = r.message;
+                    showResult('ping-result', {
+                        success: r.message.success,
+                        message: r.message.message,
+                        error: r.message.error,
+                        details: {
+                            ping_result: r.message.ping_result,
+                            response_code: r.message.response_code,
+                            environment: r.message.environment,
+                            api_key: r.message.api_key
+                        }
+                    });
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    showResult('ping-result', {
+                        success: false,
+                        message: 'Error en prueba de ping',
+                        error: r.message || 'Error desconocido'
+                    });
+                }
+            });
+        }
+        
+        // Test de widget
+        function testWidget() {
+            showLoading('widget-result', 'Probando widget...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.test_widget_loading",
+                callback: function(r) {
+                    testResults.widget = r.message;
+                    showResult('widget-result', {
+                        success: r.message.success,
+                        message: r.message.message,
+                        error: r.message.error,
+                        details: {
+                            has_html: r.message.has_html,
+                            response_code: r.message.response_code,
+                            html_length: r.message.html_length
+                        }
+                    });
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    showResult('widget-result', {
+                        success: false,
+                        message: 'Error probando widget',
+                        error: r.message || 'Error desconocido'
+                    });
+                }
+            });
+        }
+        
+        // Test de token details
+        function testTokenDetails() {
+            showLoading('token-result', 'Probando token details...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.test_token_details",
+                callback: function(r) {
+                    testResults.tokenDetails = r.message;
+                    showResult('token-result', {
+                        success: r.message.success,
+                        message: r.message.message,
+                        error: r.message.error,
+                        details: {
+                            account_token: r.message.account_token,
+                            card_number: r.message.card_number,
+                            cardholder_name: r.message.cardholder_name,
+                            response_code: r.message.response_code
+                        }
+                    });
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    showResult('token-result', {
+                        success: false,
+                        message: 'Error probando token details',
+                        error: r.message || 'Error desconocido'
+                    });
+                }
+            });
+        }
+        
+        // Test de transacción
+        function testTransaction() {
+            showLoading('transaction-result', 'Probando transacción...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.test_mock_transaction",
+                callback: function(r) {
+                    testResults.transaction = r.message;
+                    showResult('transaction-result', {
+                        success: r.message.success,
+                        message: r.message.message,
+                        error: r.message.error,
+                        details: {
+                            transaction_id: r.message.transaction_id,
+                            amount: r.message.amount,
+                            status: r.message.status,
+                            response_code: r.message.response_code
+                        }
+                    });
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    showResult('transaction-result', {
+                        success: false,
+                        message: 'Error probando transacción',
+                        error: r.message || 'Error desconocido'
+                    });
+                }
+            });
+        }
+        
+        // Ejecutar todas las pruebas
+        function runFullTest() {
+            showLoading('full-test-result', 'Ejecutando todas las pruebas...');
+            
+            frappe.call({
+                method: "gateway_usp.utils.network_test.run_full_connectivity_test",
+                callback: function(r) {
+                    testResults = r.message.tests || {};
+                    
+                    const overallSuccess = r.message.overall_success;
+                    const cssClass = overallSuccess ? 'success' : 'error';
+                    const icon = overallSuccess ? 'fa-check-circle' : 'fa-times-circle';
+                    
+                    document.getElementById('full-test-result').innerHTML = `
+                        <div class="test-result ${cssClass}">
+                            <i class="fas ${icon}"></i> 
+                            <strong>${overallSuccess ? 'Todas las pruebas completadas exitosamente' : 'Algunas pruebas fallaron'}</strong>
+                            <br><small>Timestamp: ${r.message.timestamp}</small>
+                        </div>
+                    `;
+                    
+                    // Actualizar resultados individuales
+                    if (testResults.configuration) {
+                        showResult('config-result', {
+                            success: testResults.configuration.success,
+                            message: testResults.configuration.message,
+                            error: testResults.configuration.errors ? testResults.configuration.errors.join(', ') : null,
+                            details: testResults.configuration.configuration
+                        });
+                    }
+                    
+                    if (testResults.connectivity) {
+                        showResult('ping-result', {
+                            success: testResults.connectivity.success,
+                            message: testResults.connectivity.message,
+                            error: testResults.connectivity.error,
+                            details: testResults.connectivity
+                        });
+                    }
+                    
+                    if (testResults.widget) {
+                        showResult('widget-result', {
+                            success: testResults.widget.success,
+                            message: testResults.widget.message,
+                            error: testResults.widget.error,
+                            details: testResults.widget
+                        });
+                    }
+                    
+                    if (testResults.token_details) {
+                        showResult('token-result', {
+                            success: testResults.token_details.success,
+                            message: testResults.token_details.message,
+                            error: testResults.token_details.error,
+                            details: testResults.token_details
+                        });
+                    }
+                    
+                    if (testResults.transaction) {
+                        showResult('transaction-result', {
+                            success: testResults.transaction.success,
+                            message: testResults.transaction.message,
+                            error: testResults.transaction.error,
+                            details: testResults.transaction
+                        });
+                    }
+                    
+                    updateOverallStatus();
+                },
+                error: function(r) {
+                    document.getElementById('full-test-result').innerHTML = `
+                        <div class="test-result error">
+                            <i class="fas fa-times-circle"></i> Error ejecutando pruebas completas
+                            <br><small>Error: ${r.message || 'Error desconocido'}</small>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        // Reiniciar todas las pruebas
+        function resetAllTests() {
+            testResults = {};
+            document.getElementById('config-result').innerHTML = '';
+            document.getElementById('ping-result').innerHTML = '';
+            document.getElementById('widget-result').innerHTML = '';
+            document.getElementById('token-result').innerHTML = '';
+            document.getElementById('transaction-result').innerHTML = '';
+            document.getElementById('full-test-result').innerHTML = '';
+            updateOverallStatus();
+        }
+        
+        // Actualizar estado general
+        function updateOverallStatus() {
+            const statusElement = document.getElementById('overall-status');
+            const testCount = Object.keys(testResults).length;
+            
+            if (testCount === 0) {
+                statusElement.className = 'status-badge bg-secondary';
+                statusElement.innerHTML = '<i class="fas fa-circle"></i> Sin probar';
+                return;
+            }
+            
+            const successCount = Object.values(testResults).filter(test => test.success).length;
+            const failureCount = testCount - successCount;
+            
+            if (failureCount === 0) {
+                statusElement.className = 'status-badge bg-success';
+                statusElement.innerHTML = `<i class="fas fa-check-circle"></i> ${testCount}/${testCount} Exitosas`;
+            } else if (successCount === 0) {
+                statusElement.className = 'status-badge bg-danger';
+                statusElement.innerHTML = `<i class="fas fa-times-circle"></i> ${failureCount}/${testCount} Fallidas`;
+            } else {
+                statusElement.className = 'status-badge bg-warning';
+                statusElement.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${successCount}/${testCount} Exitosas`;
+            }
+        }
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            // Actualizar timestamp
+            document.getElementById('current-time').textContent = new Date().toLocaleString('es-ES');
+            
+            // Obtener información del ambiente
+            frappe.call({
+                method: "gateway_usp.utils.network_test.get_usp_configuration",
+                callback: function(r) {
+                    if (r.message && r.message.configuration) {
+                        document.getElementById('environment-info').textContent = 
+                            `${r.message.configuration.environment} ${r.message.configuration.use_mock ? '(Mock)' : ''}`;
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
