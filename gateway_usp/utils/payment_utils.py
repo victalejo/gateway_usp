@@ -22,6 +22,61 @@ def validate_payment_amount(amount, currency="USD"):
         if flt(amount) > limits[currency]["max"]:
             frappe.throw(f"El monto máximo para {currency} es {limits[currency]['max']}")
 
+def validate_card_number_luhn(card_number):
+    """Valida número de tarjeta usando algoritmo de Luhn"""
+    # Remover espacios y guiones
+    cleaned = card_number.replace(" ", "").replace("-", "")
+    
+    # Debe contener solo números
+    if not cleaned.isdigit():
+        return False
+    
+    # Debe tener entre 13 y 19 dígitos
+    if len(cleaned) < 13 or len(cleaned) > 19:
+        return False
+    
+    # Algoritmo de Luhn
+    total = 0
+    should_double = False
+    
+    for i in range(len(cleaned) - 1, -1, -1):
+        digit = int(cleaned[i])
+        
+        if should_double:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        
+        total += digit
+        should_double = not should_double
+    
+    return total % 10 == 0
+
+def get_card_type(card_number):
+    """Detecta el tipo de tarjeta"""
+    cleaned = card_number.replace(" ", "").replace("-", "")
+    
+    patterns = {
+        'Visa': r'^4',
+        'Mastercard': r'^5[1-5]',
+        'American Express': r'^3[47]',
+        'Discover': r'^6(?:011|5)',
+        'Diners Club': r'^3[0689]',
+        'JCB': r'^35'
+    }
+    
+    import re
+    for card_type, pattern in patterns.items():
+        if re.match(pattern, cleaned):
+            return card_type
+    
+    return "Unknown"
+
+def mask_card_number(card_number):
+    """Enmascara el número de tarjeta para mostrar solo los últimos 4 dígitos"""
+    cleaned = card_number.replace(" ", "").replace("-", "")
+    return "*" * (len(cleaned) - 4) + cleaned[-4:]
+
 def get_customer_usp_data(customer_name):
     """Obtiene datos del cliente para USP"""
     customer = frappe.get_doc("Customer", customer_name)

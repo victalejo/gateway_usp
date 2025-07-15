@@ -60,6 +60,235 @@ def process_payment(payment_data):
             "message": _("Error al procesar el pago")
         }
 
+@frappe.whitelist()
+def process_payment_with_new_card(payment_data):
+    """
+    Procesa un pago con una nueva tarjeta de crédito
+    
+    Args:
+        payment_data: Datos del pago incluyendo información de la nueva tarjeta
+    """
+    try:
+        # Validar datos de entrada
+        if isinstance(payment_data, str):
+            payment_data = json.loads(payment_data)
+        
+        # Validar campos requeridos
+        required_fields = ['amount', 'customer', 'card_data']
+        for field in required_fields:
+            if not payment_data.get(field):
+                frappe.throw(f"Campo requerido faltante: {field}")
+        
+        card_data = payment_data.get('card_data')
+        card_required_fields = ['card_number', 'cardholder_name', 'expiry_month', 'expiry_year', 'cvv']
+        for field in card_required_fields:
+            if not card_data.get(field):
+                frappe.throw(f"Campo de tarjeta requerido faltante: {field}")
+        
+        # Validar monto
+        from gateway_usp.utils.payment_utils import validate_payment_amount
+        validate_payment_amount(payment_data.get('amount'), payment_data.get('currency', 'USD'))
+        
+        # Obtener SDK configurado
+        sdk = get_xpresspago_sdk()
+        customer_manager = CustomerManager(sdk)
+        transaction_manager = TransactionManager(sdk)
+        
+        # 1. Buscar o crear cliente en XpressPago
+        customer_response = _get_or_create_customer(customer_manager, payment_data.get('customer'))
+        
+        if not customer_response.get('success'):
+            frappe.throw(f"Error con cliente: {customer_response.get('error')}")
+        
+        customer_token = customer_response.get('customer_token')
+        
+        # 2. Agregar tarjeta al cliente
+        card_response = _add_card_to_customer(customer_manager, customer_token, card_data)
+        
+        if not card_response.get('success'):
+            frappe.throw(f"Error agregando tarjeta: {card_response.get('error')}")
+        
+        card_token = card_response.get('card_token')
+        
+        # 3. Procesar el pago
+        transaction_response = transaction_manager.process_sale({
+            "amount": flt(payment_data.get("amount")),
+            "customer_id": customer_token,
+            "card_token": card_token,
+            "order_tracking_number": payment_data.get("reference_docname")
+        })
+        
+        # 4. Crear registro de transacción
+        transaction = frappe.get_doc({
+            "doctype": "USP Transaction",
+            "reference_doctype": payment_data.get("reference_doctype"),
+            "reference_docname": payment_data.get("reference_docname"),
+            "amount": flt(payment_data.get("amount")),
+            "currency": payment_data.get("currency", "USD"),
+            "customer": payment_data.get("customer"),
+            "transaction_id": transaction_response.get("TransactionId"),
+            "status": "Pending",
+            "payment_method": "Credit Card",
+            "card_last_four": card_data.get("card_number")[-4:],
+            "response_data": json.dumps(transaction_response)
+        })
+        transaction.insert(ignore_permissions=True)
+        
+        # 5. Log de auditoría
+        from gateway_usp.utils.payment_utils import log_usp_transaction
+        log_usp_transaction(
+            "new_card_payment",
+            {
+                "customer": payment_data.get("customer"),
+                "amount": payment_data.get("amount"),
+                "card_last_four": card_data.get("card_number")[-4:]
+            },
+            transaction_response
+        )
+        
+        return {
+            "success": True,
+            "transaction_id": transaction_response.get("TransactionId"),
+            "status": transaction_response.get("Status"),
+            "message": _("Pago procesado exitosamente con nueva tarjeta")
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error procesando pago con nueva tarjeta: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": _("Error al procesar el pago con nueva tarjeta")
+        }
+
+def _get_or_create_customer(customer_manager, customer_name):
+    """Obtiene o crea un cliente en XpressPago"""
+    try:
+        # Obtener datos del cliente desde ERPNext
+        customer_doc = frappe.get_doc("Customer", customer_name)
+        
+        # Primero intentar buscar el cliente existente
+        search_response = customer_manager.search_customer({
+            "unique_identifier": customer_name
+        })
+        
+        if search_response.get("success") and search_response.get("data"):
+            return {
+                "success": True,
+                "customer_token": search_response["data"].get("CustomerToken"),
+                "existing": True
+            }
+        
+        # Si no existe, crear nuevo cliente
+        from gateway_usp.utils.payment_utils import get_customer_usp_data
+        customer_data = get_customer_usp_data(customer_name)
+        
+        create_response = customer_manager.create_customer(customer_data)
+        
+        if create_response.get("IsSuccess"):
+            return {
+                "success": True,
+                "customer_token": create_response.get("CustomerToken"),
+                "existing": False
+            }
+        else:
+            return {
+                "success": False,
+                "error": create_response.get("ResponseMessage", "Error creando cliente")
+            }
+            
+    except Exception as e:
+        frappe.log_error(f"Error gestionando cliente USP: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def _add_card_to_customer(customer_manager, customer_token, card_data):
+    """Agrega una tarjeta a un cliente en XpressPago"""
+    try:
+        # Preparar datos de la tarjeta según la documentación
+        card_object = {
+            "CardholderName": card_data.get("cardholder_name"),
+            "Number": card_data.get("card_number").replace(" ", ""),
+            "ExpirationMonth": card_data.get("expiry_month"),
+            "ExpirationYear": card_data.get("expiry_year"),
+            "CVV": card_data.get("cvv"),
+            "Status": "Active"
+        }
+        
+        # Crear objeto Customer con la tarjeta
+        customer_update = {
+            "CustomerToken": customer_token,
+            "CreditCards": [card_object]
+        }
+        
+        # Agregar tarjeta usando el customer manager
+        card_response = customer_manager.save_customer(customer_update)
+        
+        if card_response.get("IsSuccess"):
+            # Obtener el token de la tarjeta de la respuesta
+            card_token = None
+            if card_response.get("CreditCards"):
+                card_token = card_response["CreditCards"][0].get("Token")
+            
+            return {
+                "success": True,
+                "card_token": card_token,
+                "response": card_response
+            }
+        else:
+            return {
+                "success": False,
+                "error": card_response.get("ResponseMessage", "Error agregando tarjeta")
+            }
+            
+    except Exception as e:
+        frappe.log_error(f"Error agregando tarjeta: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def validate_card_details(card_number, expiry_month, expiry_year, cvv):
+    """Valida los datos de una tarjeta de crédito"""
+    try:
+        errors = []
+        
+        # Validar número de tarjeta
+        cleaned_number = card_number.replace(" ", "").replace("-", "")
+        if not cleaned_number.isdigit():
+            errors.append("Número de tarjeta debe contener solo números")
+        elif len(cleaned_number) < 13 or len(cleaned_number) > 19:
+            errors.append("Número de tarjeta debe tener entre 13 y 19 dígitos")
+        
+        # Validar fecha de vencimiento
+        current_year = frappe.utils.now_datetime().year
+        current_month = frappe.utils.now_datetime().month
+        
+        exp_year = int(expiry_year)
+        exp_month = int(expiry_month)
+        
+        if exp_year < current_year or (exp_year == current_year and exp_month < current_month):
+            errors.append("Tarjeta vencida")
+        
+        # Validar CVV
+        if not cvv.isdigit() or len(cvv) < 3 or len(cvv) > 4:
+            errors.append("CVV inválido")
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error validando tarjeta: {str(e)}")
+        return {
+            "valid": False,
+            "errors": [str(e)]
+        }
+
 @frappe.whitelist(allow_guest=True)
 def webhook_handler():
     """

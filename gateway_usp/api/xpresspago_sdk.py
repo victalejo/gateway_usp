@@ -72,6 +72,22 @@ class XpresspagoSDK:
             frappe.log_error(f"Error en petición XpressPago: {str(e)}")
             raise Exception(f"Error de conexión con XpressPago: {str(e)}")
 
+    # Agregar método mejorado para guardar customer con tarjetas
+    def save_customer_with_card(self, customer_data):
+        """Guarda un cliente con tarjeta de crédito"""
+        payload = {
+            "UniqueIdentifier": customer_data.get("unique_identifier"),
+            "FirstName": customer_data.get("first_name"),
+            "LastName": customer_data.get("last_name"),
+            "Email": customer_data.get("email"),
+            "Phone": customer_data.get("phone"),
+            "Company": customer_data.get("company"),
+            "CreditCards": customer_data.get("credit_cards", []),
+            "CustomFields": customer_data.get("custom_fields", {})
+        }
+        
+        return self._make_request("customer", "POST", payload)
+
 class CustomerManager:
     """Gestor de clientes en XpressPago"""
     
@@ -115,6 +131,29 @@ class CustomerManager:
         }
         
         return self.sdk._make_request("customer", "PUT", payload)
+
+    # Mejorar la clase CustomerManager
+    def save_customer(self, customer_data):
+        """Guarda o actualiza un cliente (mejorado)"""
+        payload = {
+            "UniqueIdentifier": customer_data.get("unique_identifier"),
+            "FirstName": customer_data.get("first_name"),
+            "LastName": customer_data.get("last_name"),
+            "Email": customer_data.get("email"),
+            "Phone": customer_data.get("phone"),
+            "Company": customer_data.get("company"),
+            "CustomFields": customer_data.get("custom_fields", {})
+        }
+        
+        # Agregar tarjetas si existen
+        if customer_data.get("credit_cards"):
+            payload["CreditCards"] = customer_data["credit_cards"]
+        
+        # Si ya existe CustomerToken, es una actualización
+        if customer_data.get("CustomerToken"):
+            payload["CustomerToken"] = customer_data["CustomerToken"]
+        
+        return self.sdk._make_request("customer", "POST", payload)
 
 class TransactionManager:
     """Gestor de transacciones en XpressPago"""
