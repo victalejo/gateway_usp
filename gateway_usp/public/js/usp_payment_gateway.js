@@ -1,6 +1,6 @@
 // gateway_usp/public/js/usp_payment_gateway.js
 
-// Verificar que frappe esté disponible antes de continuar
+// Verificar que frappe esté disponible
 if (typeof frappe === 'undefined') {
     console.warn('Frappe no está disponible, saltando inicialización USP');
 } else {
@@ -14,53 +14,53 @@ if (typeof frappe === 'undefined') {
         }
 
         init() {
-            // Solo inicializar una vez
             if (this.initialized) return;
             
             try {
                 this.setup_payment_integration();
                 this.initialized = true;
+                console.log('USP Gateway inicializado correctamente');
             } catch (error) {
                 console.error('Error inicializando USP Gateway:', error);
+                this.initialized = false;
             }
+        }
+
+        // Método para reinicializar si es necesario
+        reinitialize() {
+            this.initialized = false;
+            this.init();
         }
 
         setup_payment_integration() {
-            const me = this;
-            
-            // Solo ejecutar en contextos específicos
-            if (!this.should_initialize()) {
-                return;
-            }
-
-            // Configurar según el contexto
-            if (frappe.route_options && frappe.route_options.doctype === "Payment Request") {
-                this.setup_payment_request_integration();
-            }
-        }
-
-        should_initialize() {
-            // Verificar si estamos en un contexto apropiado
-            const current_route = frappe.get_route();
-            const valid_contexts = ['Form', 'payment-request', 'sales-invoice'];
-            
-            return current_route && current_route.some(route => 
-                valid_contexts.some(context => route.includes(context))
-            );
+            // Configuración básica - siempre disponible
+            console.log('Configurando integración USP...');
         }
 
         setup_payment_request_integration() {
             const me = this;
             
-            // Solo proceder si tenemos datos de ruta válidos
-            if (!frappe.route_options || !frappe.route_options.customer) {
+            console.log('Configurando Payment Request para USP...');
+            
+            // Verificar datos básicos
+            if (!frappe.route_options) {
+                console.warn('No hay datos de ruta disponibles');
+                me.show_new_card_form();
                 return;
             }
 
+            const customer = frappe.route_options.customer;
+            if (!customer) {
+                console.warn('No hay customer en route_options');
+                me.show_new_card_form();
+                return;
+            }
+
+            // Obtener tarjetas del cliente
             frappe.call({
                 method: "gateway_usp.api.payment_controller.get_customer_cards",
                 args: {
-                    customer: frappe.route_options.customer
+                    customer: customer
                 },
                 callback: function(r) {
                     if (r.message && r.message.length > 0) {
@@ -71,6 +71,7 @@ if (typeof frappe === 'undefined') {
                 },
                 error: function(error) {
                     console.error('Error obteniendo tarjetas:', error);
+                    me.show_new_card_form();
                 }
             });
         }
@@ -94,17 +95,24 @@ if (typeof frappe === 'undefined') {
                 ],
                 primary_action_label: __("Pagar"),
                 primary_action: function() {
-                    me.process_payment.call(me);
-                    dialog.hide();
+                    const use_new = dialog.get_value('use_new_card');
+                    if (use_new) {
+                        dialog.hide();
+                        me.show_new_card_form();
+                    } else {
+                        me.process_payment();
+                        dialog.hide();
+                    }
                 }
             });
 
             let cards_html = '<div class="usp-saved-cards">';
-            cards.forEach(card => {
+            cards.forEach((card, index) => {
+                const checked = index === 0 ? 'checked' : '';
                 cards_html += `
-                    <div class="card-option" data-token="${card.token}">
-                        <input type="radio" name="selected_card" value="${card.token}">
-                        <label>**** **** **** ${card.last_four} - ${card.brand} (${card.expiry})</label>
+                    <div class="card-option" data-token="${card.token}" style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                        <input type="radio" name="selected_card" value="${card.token}" ${checked}>
+                        <label style="margin-left: 10px;">**** **** **** ${card.last_four} - ${card.brand} (${card.expiry})</label>
                     </div>
                 `;
             });
@@ -118,13 +126,14 @@ if (typeof frappe === 'undefined') {
             const me = this;
             
             const dialog = new frappe.ui.Dialog({
-                title: __("Pagar con USP Gateway"),
+                title: __("Nueva Tarjeta - USP Gateway"),
                 fields: [
                     {
                         label: __("Número de Tarjeta"),
                         fieldname: "card_number",
                         fieldtype: "Data",
-                        reqd: 1
+                        reqd: 1,
+                        description: "Ingrese el número completo de la tarjeta"
                     },
                     {
                         label: __("Nombre del Titular"),
@@ -150,17 +159,19 @@ if (typeof frappe === 'undefined') {
                         label: __("CVV"),
                         fieldname: "cvv",
                         fieldtype: "Data",
-                        reqd: 1
+                        reqd: 1,
+                        description: "Código de seguridad de 3 dígitos"
                     },
                     {
                         label: __("Guardar Tarjeta"),
                         fieldname: "save_card",
-                        fieldtype: "Check"
+                        fieldtype: "Check",
+                        description: "Guardar esta tarjeta para futuros pagos"
                     }
                 ],
-                primary_action_label: __("Pagar"),
+                primary_action_label: __("Procesar Pago"),
                 primary_action: function() {
-                    me.process_new_card_payment.call(me);
+                    me.process_new_card_payment();
                     dialog.hide();
                 }
             });
@@ -192,6 +203,8 @@ if (typeof frappe === 'undefined') {
                 return;
             }
 
+            frappe.show_progress(__('Procesando pago...'), 50);
+
             frappe.call({
                 method: "gateway_usp.api.payment_controller.process_payment",
                 args: {
@@ -205,6 +218,8 @@ if (typeof frappe === 'undefined') {
                     }
                 },
                 callback: function(r) {
+                    frappe.hide_progress();
+                    
                     if (r.message && r.message.success) {
                         frappe.msgprint({
                             title: __("Pago Exitoso"),
@@ -217,12 +232,13 @@ if (typeof frappe === 'undefined') {
                     } else {
                         frappe.msgprint({
                             title: __("Error en el Pago"),
-                            message: r.message.message || __("Error al procesar el pago"),
+                            message: r.message?.message || __("Error al procesar el pago"),
                             indicator: "red"
                         });
                     }
                 },
                 error: function(error) {
+                    frappe.hide_progress();
                     console.error('Error procesando pago:', error);
                     frappe.msgprint({
                         title: __("Error en el Pago"),
@@ -234,19 +250,30 @@ if (typeof frappe === 'undefined') {
         }
 
         process_new_card_payment() {
-            // Implementar lógica para nueva tarjeta
-            frappe.msgprint(__("Funcionalidad de nueva tarjeta en desarrollo"));
+            frappe.msgprint({
+                title: __("Desarrollo"),
+                message: __("Funcionalidad de nueva tarjeta en desarrollo. Contacte soporte."),
+                indicator: "blue"
+            });
         }
     };
 
-    // Inicialización controlada - solo cuando frappe esté completamente cargado
+    // Función para asegurar que el gateway esté disponible
+    gateway_usp.ensure_gateway = function() {
+        if (!window.usp_gateway || !window.usp_gateway.initialized) {
+            console.log('Reinicializando USP Gateway...');
+            window.usp_gateway = new gateway_usp.PaymentGateway();
+        }
+        return window.usp_gateway;
+    };
+
+    // Inicialización robusta
     $(document).ready(function() {
-        // Verificar que estamos en un contexto apropiado
         if (typeof frappe !== 'undefined' && frappe.ready) {
-            // Usar setTimeout para asegurar que frappe esté completamente inicializado
             setTimeout(function() {
                 try {
                     window.usp_gateway = new gateway_usp.PaymentGateway();
+                    console.log('USP Gateway inicializado en document.ready');
                 } catch (error) {
                     console.error('Error inicializando USP Gateway:', error);
                 }
@@ -255,22 +282,34 @@ if (typeof frappe === 'undefined') {
     });
 }
 
-// Hooks específicos para formularios - solo ejecutar si frappe está disponible
+// Hooks mejorados para formularios
 if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
     frappe.ui.form.on('Payment Request', {
         refresh: function(frm) {
             try {
                 if (frm.doc.docstatus === 1 && frm.doc.status !== "Paid") {
                     frm.add_custom_button(__("Pagar con USP"), function() {
-                        if (window.usp_gateway) {
-                            window.usp_gateway.setup_payment_request_integration();
+                        // Asegurar que el gateway esté disponible
+                        const gateway = gateway_usp.ensure_gateway();
+                        
+                        if (gateway && gateway.initialized) {
+                            gateway.setup_payment_request_integration();
                         } else {
-                            frappe.msgprint(__("Gateway USP no disponible"));
+                            frappe.msgprint({
+                                title: __("Error"),
+                                message: __("Error inicializando USP Gateway. Por favor recarga la página."),
+                                indicator: "red"
+                            });
                         }
                     });
                 }
             } catch (error) {
                 console.error('Error en Payment Request hook:', error);
+                frappe.msgprint({
+                    title: __("Error"),
+                    message: __("Error configurando USP Gateway"),
+                    indicator: "red"
+                });
             }
         }
     });
@@ -280,20 +319,30 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
             try {
                 if (frm.doc.docstatus === 1 && frm.doc.outstanding_amount > 0) {
                     frm.add_custom_button(__("Pagar con USP"), function() {
-                        // Crear Payment Request con USP
+                        frappe.show_progress(__('Creando Payment Request...'), 30);
+                        
                         frappe.call({
                             method: "gateway_usp.utils.payment_utils.create_payment_request_with_usp",
                             args: {
-                                doc: frm.doc.name,  // Enviar solo el nombre del documento
+                                doc: frm.doc.name,
                                 amount: frm.doc.outstanding_amount,
                                 currency: frm.doc.currency
                             },
                             callback: function(r) {
+                                frappe.hide_progress();
+                                
                                 if (r.message) {
                                     frappe.set_route('Form', 'Payment Request', r.message.name);
+                                } else {
+                                    frappe.msgprint({
+                                        title: __("Error"),
+                                        message: __("No se pudo crear el Payment Request"),
+                                        indicator: "red"
+                                    });
                                 }
                             },
                             error: function(r) {
+                                frappe.hide_progress();
                                 frappe.msgprint({
                                     title: __("Error"),
                                     message: r.message || __("Error creando Payment Request"),
