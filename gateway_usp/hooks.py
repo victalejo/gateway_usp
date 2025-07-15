@@ -12,21 +12,20 @@ app_license = "MIT"
 # Documentos requeridos
 required_apps = ["erpnext"]
 
-# Hooks para DocTypes con carga condicional
+# Hooks para DocTypes - CORREGIDO
 doctype_js = {
     "Sales Invoice": "public/js/usp_payment_gateway.js",
     "Payment Request": "public/js/usp_payment_gateway.js"
 }
 
-# Assets que se cargan globalmente
-app_include_js = [
-    "usp_payment_gateway.bundle.js"
-]
+# Assets que se cargan globalmente - REMOVIDO bundles inexistentes
+# app_include_js = [
+#     "usp_payment_gateway.bundle.js"
+# ]
 
-# Crear el bundle
-app_include_css = [
-    "usp_payment_gateway.bundle.css"
-]
+# app_include_css = [
+#     "usp_payment_gateway.bundle.css"
+# ]
 
 # Hooks para instalación
 after_install = "gateway_usp.install.after_install"

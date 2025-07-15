@@ -10,6 +10,7 @@ if (typeof frappe === 'undefined') {
         constructor(options) {
             this.options = options || {};
             this.initialized = false;
+            this.card_validation_timeout = null; // NUEVO: Para evitar múltiples validaciones
             this.init();
         }
 
@@ -136,13 +137,17 @@ if (typeof frappe === 'undefined') {
                         reqd: 1,
                         placeholder: "1234 5678 9012 3456",
                         change: function() {
-                            // Formatear número de tarjeta
-                            let value = this.get_value().replace(/\s/g, '');
-                            let formatted = value.replace(/(.{4})/g, '$1 ').trim();
-                            this.set_value(formatted);
+                            // CORREGIDO: Evitar múltiples llamadas
+                            if (me.card_validation_timeout) {
+                                clearTimeout(me.card_validation_timeout);
+                            }
                             
-                            // Detectar tipo de tarjeta
-                            me.detect_card_type(value);
+                            me.card_validation_timeout = setTimeout(() => {
+                                const value = this.get_value();
+                                if (value) {
+                                    me.format_and_detect_card(this, value);
+                                }
+                            }, 300); // Esperar 300ms después de que el usuario deje de escribir
                         }
                     },
                     {
@@ -174,7 +179,14 @@ if (typeof frappe === 'undefined') {
                         fieldname: "cvv",
                         fieldtype: "Data",
                         reqd: 1,
-                        placeholder: "123"
+                        placeholder: "123",
+                        change: function() {
+                            // Limitar CVV a 3-4 dígitos
+                            const value = this.get_value();
+                            if (value && value.length > 4) {
+                                this.set_value(value.substring(0, 4));
+                            }
+                        }
                     },
                     {
                         fieldtype: "Section Break"
@@ -190,7 +202,7 @@ if (typeof frappe === 'undefined') {
                         fieldname: "card_info",
                         options: `
                             <div class="card-info" style="margin-top: 10px;">
-                                <div class="card-type" style="font-weight: bold; margin-bottom: 5px;"></div>
+                                <div class="card-type" style="font-weight: bold; margin-bottom: 5px; color: #2196F3;"></div>
                                 <div class="security-info" style="color: #666; font-size: 12px;">
                                     <i class="fa fa-lock"></i> Sus datos están protegidos con encriptación SSL
                                 </div>
@@ -205,168 +217,257 @@ if (typeof frappe === 'undefined') {
             });
 
             dialog.show();
+            
+            // Referencia al diálogo para uso posterior
+            this.current_dialog = dialog;
+        }
+
+        // CORREGIDO: Función para formatear y detectar tarjeta
+        format_and_detect_card(field, value) {
+            try {
+                // Remover espacios existentes
+                let cleaned = value.replace(/\s/g, '');
+                
+                // Validar que solo contenga números
+                if (!/^\d*$/.test(cleaned)) {
+                    cleaned = cleaned.replace(/\D/g, '');
+                }
+                
+                // Limitar a 19 dígitos máximo
+                if (cleaned.length > 19) {
+                    cleaned = cleaned.substring(0, 19);
+                }
+                
+                // Formatear con espacios cada 4 dígitos
+                let formatted = cleaned.replace(/(.{4})/g, '$1 ').trim();
+                
+                // Actualizar el campo solo si es diferente para evitar bucles
+                if (field.get_value() !== formatted) {
+                    field.set_value(formatted);
+                }
+                
+                // Detectar tipo de tarjeta
+                this.detect_card_type(cleaned);
+                
+            } catch (error) {
+                console.error('Error formateando tarjeta:', error);
+            }
+        }
+
+        // CORREGIDO: Función para detectar tipo de tarjeta
+        detect_card_type(card_number) {
+            try {
+                if (!card_number || card_number.length < 4) {
+                    this.update_card_type_display("Desconocida");
+                    return;
+                }
+                
+                let card_type = "Desconocida";
+                
+                // Patrones para diferentes tipos de tarjetas
+                const patterns = {
+                    'Visa': /^4/,
+                    'Mastercard': /^5[1-5]/,
+                    'American Express': /^3[47]/,
+                    'Discover': /^6(?:011|5)/,
+                    'Diners Club': /^3[0689]/,
+                    'JCB': /^35/
+                };
+                
+                for (const [type, pattern] of Object.entries(patterns)) {
+                    if (pattern.test(card_number)) {
+                        card_type = type;
+                        break;
+                    }
+                }
+                
+                this.update_card_type_display(card_type);
+                
+            } catch (error) {
+                console.error('Error detectando tipo de tarjeta:', error);
+                this.update_card_type_display("Error");
+            }
+        }
+
+        // NUEVA: Función para actualizar la UI del tipo de tarjeta
+        update_card_type_display(card_type) {
+            try {
+                if (this.current_dialog) {
+                    const card_info = this.current_dialog.fields_dict.card_info.$wrapper.find('.card-type');
+                    if (card_info.length) {
+                        card_info.text(`Tipo: ${card_type}`);
+                        
+                        // Cambiar color según el tipo
+                        const color = card_type === "Desconocida" ? "#999" : "#2196F3";
+                        card_info.css('color', color);
+                    }
+                }
+            } catch (error) {
+                console.error('Error actualizando tipo de tarjeta:', error);
+            }
         }
 
         get_year_options() {
             const currentYear = new Date().getFullYear();
             let options = '';
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 15; i++) {
                 const year = currentYear + i;
                 options += `${year}\n`;
             }
             return options;
         }
 
-        // Función para detectar tipo de tarjeta
-        detect_card_type(card_number) {
-            const cleaned = card_number.replace(/[\s-]/g, '');
-            let card_type = "Desconocida";
-            
-            // Patrones para diferentes tipos de tarjetas
-            const patterns = {
-                'Visa': /^4/,
-                'Mastercard': /^5[1-5]/,
-                'American Express': /^3[47]/,
-                'Discover': /^6(?:011|5)/,
-                'Diners Club': /^3[0689]/,
-                'JCB': /^35/
-            };
-            
-            for (const [type, pattern] of Object.entries(patterns)) {
-                if (pattern.test(cleaned)) {
-                    card_type = type;
-                    break;
-                }
-            }
-            
-            // Actualizar UI
-            const card_info = cur_dialog.fields_dict.card_info.$wrapper.find('.card-type');
-            card_info.text(`Tipo: ${card_type}`);
-        }
-
-        // Función para validar número de tarjeta (algoritmo de Luhn)
+        // CORREGIDO: Validación de tarjeta mejorada
         validate_card_number(card_number) {
-            // Remover espacios y guiones
-            const cleaned = card_number.replace(/[\s-]/g, '');
-            
-            // Debe contener solo números
-            if (!/^\d+$/.test(cleaned)) {
-                return false;
-            }
-            
-            // Debe tener entre 13 y 19 dígitos
-            if (cleaned.length < 13 || cleaned.length > 19) {
-                return false;
-            }
-            
-            // Algoritmo de Luhn
-            let sum = 0;
-            let shouldDouble = false;
-            
-            for (let i = cleaned.length - 1; i >= 0; i--) {
-                let digit = parseInt(cleaned.charAt(i));
+            try {
+                // Remover espacios y guiones
+                const cleaned = card_number.replace(/[\s-]/g, '');
                 
-                if (shouldDouble) {
-                    digit *= 2;
-                    if (digit > 9) {
-                        digit -= 9;
-                    }
+                // Debe contener solo números
+                if (!/^\d+$/.test(cleaned)) {
+                    return false;
                 }
                 
-                sum += digit;
-                shouldDouble = !shouldDouble;
+                // Debe tener entre 13 y 19 dígitos
+                if (cleaned.length < 13 || cleaned.length > 19) {
+                    return false;
+                }
+                
+                // Algoritmo de Luhn
+                let sum = 0;
+                let shouldDouble = false;
+                
+                for (let i = cleaned.length - 1; i >= 0; i--) {
+                    let digit = parseInt(cleaned.charAt(i));
+                    
+                    if (shouldDouble) {
+                        digit *= 2;
+                        if (digit > 9) {
+                            digit -= 9;
+                        }
+                    }
+                    
+                    sum += digit;
+                    shouldDouble = !shouldDouble;
+                }
+                
+                return sum % 10 === 0;
+                
+            } catch (error) {
+                console.error('Error validando tarjeta:', error);
+                return false;
             }
-            
-            return sum % 10 === 0;
         }
 
-        // Reemplazar la función process_new_card_payment existente
+        // CORREGIDO: Procesamiento de pago mejorado
         process_new_card_payment() {
             const me = this;
             
-            // Obtener datos del formulario
-            const dialog = cur_dialog;
-            const values = dialog.get_values();
-            
-            // Validar datos requeridos
-            if (!values.card_number || !values.cardholder_name || !values.expiry_month || 
-                !values.expiry_year || !values.cvv) {
-                frappe.msgprint(__("Todos los campos son obligatorios"));
-                return;
-            }
-            
-            // Validar número de tarjeta (básico)
-            if (!me.validate_card_number(values.card_number)) {
-                frappe.msgprint(__("Número de tarjeta inválido"));
-                return;
-            }
-            
-            // Validar CVV
-            if (values.cvv.length < 3 || values.cvv.length > 4) {
-                frappe.msgprint(__("CVV inválido"));
-                return;
-            }
-            
-            // Mostrar indicador de carga
-            frappe.show_progress(__("Procesando pago"), 30, 100, __("Validando tarjeta..."));
-            
-            // Preparar datos para el pago
-            const payment_data = {
-                // Datos del pago
-                amount: frappe.route_options.amount,
-                currency: frappe.route_options.currency || "USD",
-                customer: frappe.route_options.customer,
-                reference_doctype: "Payment Request",
-                reference_docname: frappe.route_options.name,
+            try {
+                // Obtener datos del formulario
+                const dialog = me.current_dialog;
+                const values = dialog.get_values();
                 
-                // Datos de la nueva tarjeta
-                card_data: {
-                    card_number: values.card_number.replace(/\s/g, ''), // Remover espacios
-                    cardholder_name: values.cardholder_name,
-                    expiry_month: values.expiry_month,
-                    expiry_year: values.expiry_year,
-                    cvv: values.cvv,
-                    save_card: values.save_card || false
+                // Validar datos requeridos
+                if (!values.card_number || !values.cardholder_name || !values.expiry_month || 
+                    !values.expiry_year || !values.cvv) {
+                    frappe.msgprint(__("Todos los campos son obligatorios"));
+                    return;
                 }
-            };
-            
-            // Procesar pago con nueva tarjeta
-            frappe.call({
-                method: "gateway_usp.api.payment_controller.process_payment_with_new_card",
-                args: {
-                    payment_data: payment_data
-                },
-                callback: function(r) {
-                    frappe.hide_progress();
+                
+                // Validar número de tarjeta
+                if (!me.validate_card_number(values.card_number)) {
+                    frappe.msgprint(__("Número de tarjeta inválido"));
+                    return;
+                }
+                
+                // Validar CVV
+                if (values.cvv.length < 3 || values.cvv.length > 4 || !/^\d+$/.test(values.cvv)) {
+                    frappe.msgprint(__("CVV inválido"));
+                    return;
+                }
+                
+                // Validar fecha de vencimiento
+                const currentYear = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
+                const expYear = parseInt(values.expiry_year);
+                const expMonth = parseInt(values.expiry_month);
+                
+                if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
+                    frappe.msgprint(__("Tarjeta vencida"));
+                    return;
+                }
+                
+                // Cerrar diálogo
+                dialog.hide();
+                
+                // Mostrar indicador de carga
+                frappe.show_progress(__("Procesando pago"), 30, 100, __("Validando tarjeta..."));
+                
+                // Preparar datos para el pago
+                const payment_data = {
+                    amount: frappe.route_options?.amount || 0,
+                    currency: frappe.route_options?.currency || "USD",
+                    customer: frappe.route_options?.customer,
+                    reference_doctype: "Payment Request",
+                    reference_docname: frappe.route_options?.name,
                     
-                    if (r.message && r.message.success) {
-                        frappe.msgprint({
-                            title: __("Pago Exitoso"),
-                            message: __("Su pago ha sido procesado exitosamente. ID: {0}", [r.message.transaction_id]),
-                            indicator: "green"
-                        });
+                    card_data: {
+                        card_number: values.card_number.replace(/\s/g, ''),
+                        cardholder_name: values.cardholder_name,
+                        expiry_month: values.expiry_month,
+                        expiry_year: values.expiry_year,
+                        cvv: values.cvv,
+                        save_card: values.save_card || false
+                    }
+                };
+                
+                // Procesar pago
+                frappe.call({
+                    method: "gateway_usp.api.payment_controller.process_payment_with_new_card",
+                    args: {
+                        payment_data: payment_data
+                    },
+                    callback: function(r) {
+                        frappe.hide_progress();
                         
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 3000);
-                    } else {
+                        if (r.message && r.message.success) {
+                            frappe.msgprint({
+                                title: __("Pago Exitoso"),
+                                message: __("Su pago ha sido procesado exitosamente. ID: {0}", [r.message.transaction_id]),
+                                indicator: "green"
+                            });
+                            
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                        } else {
+                            frappe.msgprint({
+                                title: __("Error en el Pago"),
+                                message: r.message?.message || __("Error al procesar el pago"),
+                                indicator: "red"
+                            });
+                        }
+                    },
+                    error: function(error) {
+                        frappe.hide_progress();
+                        console.error('Error procesando pago:', error);
                         frappe.msgprint({
                             title: __("Error en el Pago"),
-                            message: r.message.message || __("Error al procesar el pago"),
+                            message: __("Error de conexión al procesar el pago"),
                             indicator: "red"
                         });
                     }
-                },
-                error: function(error) {
-                    frappe.hide_progress();
-                    console.error('Error procesando pago:', error);
-                    frappe.msgprint({
-                        title: __("Error en el Pago"),
-                        message: __("Error de conexión al procesar el pago"),
-                        indicator: "red"
-                    });
-                }
-            });
+                });
+                
+            } catch (error) {
+                console.error('Error en process_new_card_payment:', error);
+                frappe.msgprint({
+                    title: __("Error"),
+                    message: __("Error procesando el pago"),
+                    indicator: "red"
+                });
+            }
         }
 
         process_payment() {
@@ -433,7 +534,7 @@ if (typeof frappe === 'undefined') {
     // Función para asegurar que el gateway esté disponible
     gateway_usp.ensure_gateway = function() {
         if (!window.usp_gateway || !window.usp_gateway.initialized) {
-            console.log('Reinicializando USP Gateway...');
+            console.log('Inicializando USP Gateway...');
             window.usp_gateway = new gateway_usp.PaymentGateway();
         }
         return window.usp_gateway;
@@ -454,14 +555,13 @@ if (typeof frappe === 'undefined') {
     });
 }
 
-// Hooks mejorados para formularios
+// Hooks para formularios
 if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
     frappe.ui.form.on('Payment Request', {
         refresh: function(frm) {
             try {
                 if (frm.doc.docstatus === 1 && frm.doc.status !== "Paid") {
                     frm.add_custom_button(__("Pagar con USP"), function() {
-                        // Asegurar que el gateway esté disponible
                         const gateway = gateway_usp.ensure_gateway();
                         
                         if (gateway && gateway.initialized) {
@@ -477,11 +577,6 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
                 }
             } catch (error) {
                 console.error('Error en Payment Request hook:', error);
-                frappe.msgprint({
-                    title: __("Error"),
-                    message: __("Error configurando USP Gateway"),
-                    indicator: "red"
-                });
             }
         }
     });
