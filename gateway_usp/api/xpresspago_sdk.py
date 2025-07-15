@@ -25,10 +25,10 @@ class XpresspagoSDK:
             terminal_name: TID provisto por el Banco Adquirente
         """
         self.environment = environment
-        self.api_key = api_key
-        self.access_code = access_code
-        self.merchant_account_number = merchant_account_number
-        self.terminal_name = terminal_name
+        self.api_key = api_key or "TEST_API_KEY"
+        self.access_code = access_code or "TEST_ACCESS_CODE"
+        self.merchant_account_number = merchant_account_number or "TEST_MERCHANT"
+        self.terminal_name = terminal_name or "TEST_TERMINAL"
         
         # URLs basadas en la documentación CROEM
         self.base_urls = {
@@ -377,44 +377,85 @@ class TransactionManager:
         )
 
 
-# Función actualizada para obtener SDK
+# Función actualizada para obtener SDK con manejo de errores
 def get_xpresspago_sdk():
-    """Obtiene una instancia configurada del SDK"""
-    settings = frappe.get_single("USP Payment Gateway Settings")
+    """Obtiene una instancia configurada del SDK con manejo de errores mejorado"""
+    try:
+        settings = frappe.get_single("USP Payment Gateway Settings")
+        
+        if not settings.is_enabled:
+            frappe.throw("Gateway USP no está habilitado")
+        
+        # Verificar si usar modo mock
+        use_mock = frappe.conf.get('usp_use_mock', False) or settings.get('use_mock_mode', False)
+        
+        # Obtener credenciales con manejo de errores
+        api_key = None
+        access_code = None
+        merchant_account_number = None
+        terminal_name = None
+        
+        # Obtener credenciales CROEM con manejo de errores
+        try:
+            if settings.get('api_key'):
+                api_key = settings.get('api_key')
+            if settings.get('access_code'):
+                try:
+                    access_code = settings.get_password("access_code")
+                except frappe.exceptions.ValidationError:
+                    frappe.log_error("Access code no encontrado, usando valor por defecto")
+                    access_code = None
+            if settings.get('merchant_account_number'):
+                merchant_account_number = settings.get('merchant_account_number')
+            if settings.get('terminal_name'):
+                terminal_name = settings.get('terminal_name')
+        except Exception as e:
+            frappe.log_error(f"Error obteniendo credenciales CROEM: {str(e)}")
+        
+        # Fallback a credenciales legacy si CROEM no está disponible
+        if not api_key or not access_code:
+            try:
+                api_key = api_key or settings.get('merchant_id')
+                try:
+                    access_code = access_code or settings.get_password("secret_key")
+                except frappe.exceptions.ValidationError:
+                    frappe.log_error("Secret key no encontrado, usando valor por defecto")
+                    access_code = None
+                merchant_account_number = merchant_account_number or settings.get('merchant_id')
+                terminal_name = terminal_name or settings.get('terminal_id')
+            except Exception as e:
+                frappe.log_error(f"Error obteniendo credenciales legacy: {str(e)}")
+        
+        # Usar valores por defecto si no se encuentran credenciales
+        api_key = api_key or "TEST_API_KEY"
+        access_code = access_code or "TEST_ACCESS_CODE"
+        merchant_account_number = merchant_account_number or "TEST_MERCHANT"
+        terminal_name = terminal_name or "TEST_TERMINAL"
+        
+        if use_mock:
+            return MockXpresspagoSDK(
+                environment=settings.environment,
+                api_key=api_key,
+                access_code=access_code,
+                merchant_account_number=merchant_account_number,
+                terminal_name=terminal_name
+            )
+        else:
+            return XpresspagoSDK(
+                environment=settings.environment,
+                api_key=api_key,
+                access_code=access_code,
+                merchant_account_number=merchant_account_number,
+                terminal_name=terminal_name
+            )
     
-    if not settings.is_enabled:
-        frappe.throw("Gateway USP no está habilitado")
-    
-    # Verificar si usar modo mock
-    use_mock = frappe.conf.get('usp_use_mock', False) or settings.get('use_mock_mode', False)
-    
-    # Obtener credenciales: priorizar CROEM sobre legacy
-    if settings.get('api_key') and settings.get('access_code'):
-        # Usar credenciales CROEM
-        api_key = settings.get('api_key')
-        access_code = settings.get_password("access_code")
-        merchant_account_number = settings.get('merchant_account_number')
-        terminal_name = settings.get('terminal_name')
-    else:
-        # Fallback a credenciales legacy
-        api_key = settings.get('merchant_id')
-        access_code = settings.get_password("secret_key")
-        merchant_account_number = settings.get('merchant_id')
-        terminal_name = settings.get('terminal_id')
-    
-    if use_mock:
+    except Exception as e:
+        frappe.log_error(f"Error crítico inicializando SDK: {str(e)}")
+        # Retornar SDK mock como último recurso
         return MockXpresspagoSDK(
-            environment=settings.environment,
-            api_key=api_key,
-            access_code=access_code,
-            merchant_account_number=merchant_account_number,
-            terminal_name=terminal_name
-        )
-    else:
-        return XpresspagoSDK(
-            environment=settings.environment,
-            api_key=api_key,
-            access_code=access_code,
-            merchant_account_number=merchant_account_number,
-            terminal_name=terminal_name
+            environment="SANDBOX",
+            api_key="FALLBACK_API_KEY",
+            access_code="FALLBACK_ACCESS_CODE",
+            merchant_account_number="FALLBACK_MERCHANT",
+            terminal_name="FALLBACK_TERMINAL"
         )

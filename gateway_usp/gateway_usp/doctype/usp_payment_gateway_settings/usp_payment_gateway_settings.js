@@ -6,6 +6,21 @@ frappe.ui.form.on('USP Payment Gateway Settings', {
         // Limpiar botones existentes
         frm.clear_custom_buttons();
         
+        // Botón para configurar datos de prueba
+        frm.add_custom_button(__('Configurar Datos de Prueba'), function() {
+            frappe.confirm(
+                __('¿Configurar credenciales de prueba para desarrollo?'),
+                function() {
+                    frappe.call({
+                        method: "gateway_usp.utils.setup_test_data.setup_test_credentials",
+                        callback: function(r) {
+                            frm.refresh();
+                        }
+                    });
+                }
+            );
+        }, __('Desarrollo'));
+        
         // Botones principales
         if (frm.doc.is_enabled) {
             // Grupo de Pruebas
@@ -50,9 +65,9 @@ frappe.ui.form.on('USP Payment Gateway Settings', {
             }
             
             // Indicador de tipo de credenciales
-            if (frm.doc.api_key && frm.doc.access_code) {
+            if (frm.doc.api_key) {
                 frm.dashboard.add_indicator(__('Credenciales CROEM v6.5'), 'green');
-            } else if (frm.doc.merchant_id && frm.doc.secret_key) {
+            } else if (frm.doc.merchant_id) {
                 frm.dashboard.add_indicator(__('Credenciales Legacy'), 'orange');
             }
             
