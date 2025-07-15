@@ -43,25 +43,82 @@ if (typeof frappe === 'undefined') {
             
             console.log('Configurando Payment Request para USP...');
             
-            // Verificar datos básicos
-            if (!frappe.route_options) {
-                console.warn('No hay datos de ruta disponibles');
+            // NUEVO: Función para obtener datos del cliente de múltiples fuentes
+            function getCustomerData() {
+                let customer_data = {};
+                
+                // Fuente 1: frappe.route_options
+                if (frappe.route_options) {
+                    customer_data = {
+                        customer: frappe.route_options.customer || frappe.route_options.party,
+                        customer_name: frappe.route_options.customer_name,
+                        amount: frappe.route_options.amount || frappe.route_options.grand_total,
+                        currency: frappe.route_options.currency || "USD",
+                        reference_doctype: frappe.route_options.reference_doctype,
+                        reference_docname: frappe.route_options.reference_docname || frappe.route_options.name
+                    };
+                }
+                
+                // Fuente 2: localStorage como respaldo
+                if (!customer_data.customer) {
+                    const stored_data = localStorage.getItem('usp_payment_data');
+                    if (stored_data) {
+                        try {
+                            const parsed_data = JSON.parse(stored_data);
+                            customer_data = {
+                                customer: parsed_data.customer || parsed_data.party,
+                                customer_name: parsed_data.customer_name,
+                                amount: parsed_data.amount || parsed_data.grand_total,
+                                currency: parsed_data.currency || "USD",
+                                reference_doctype: parsed_data.reference_doctype,
+                                reference_docname: parsed_data.reference_docname || parsed_data.name
+                            };
+                        } catch (e) {
+                            console.error('Error parsing stored payment data:', e);
+                        }
+                    }
+                }
+                
+                // Fuente 3: cur_frm como último recurso
+                if (!customer_data.customer && cur_frm && cur_frm.doc) {
+                    customer_data = {
+                        customer: cur_frm.doc.party || cur_frm.doc.customer,
+                        customer_name: cur_frm.doc.customer_name,
+                        amount: cur_frm.doc.grand_total,
+                        currency: cur_frm.doc.currency || "USD",
+                        reference_doctype: "Payment Request",
+                        reference_docname: cur_frm.doc.name
+                    };
+                }
+                
+                return customer_data;
+            }
+            
+            // Obtener datos del cliente
+            const customer_data = getCustomerData();
+            
+            console.log('Datos del cliente obtenidos:', customer_data);
+            
+            // Validar que tenemos datos del cliente
+            if (!customer_data.customer) {
+                console.warn('No se encontraron datos del cliente');
+                frappe.msgprint({
+                    title: __("Error"),
+                    message: __("No se encontraron datos del cliente. Por favor, recarga la página."),
+                    indicator: "orange"
+                });
                 me.show_new_card_form();
                 return;
             }
-
-            const customer = frappe.route_options.customer;
-            if (!customer) {
-                console.warn('No hay customer en route_options');
-                me.show_new_card_form();
-                return;
-            }
-
+            
+            // Guardar datos del cliente en la instancia
+            me.customer_data = customer_data;
+            
             // Obtener tarjetas del cliente
             frappe.call({
                 method: "gateway_usp.api.payment_controller.get_customer_cards",
                 args: {
-                    customer: customer
+                    customer: customer_data.customer
                 },
                 callback: function(r) {
                     if (r.message && r.message.length > 0) {
@@ -206,6 +263,20 @@ if (typeof frappe === 'undefined') {
                                 <div class="security-info" style="color: #666; font-size: 12px;">
                                     <i class="fa fa-lock"></i> Sus datos están protegidos con encriptación SSL
                                 </div>
+                            </div>
+                        `
+                    },
+                    {
+                        fieldtype: "Section Break"
+                    },
+                    {
+                        fieldtype: "HTML",
+                        fieldname: "debug_info",
+                        options: `
+                            <div style="margin-top: 10px;">
+                                <button type="button" class="btn btn-xs btn-default" onclick="window.usp_gateway.debug_payment_data()">
+                                    Debug Info
+                                </button>
                             </div>
                         `
                     }
@@ -359,7 +430,7 @@ if (typeof frappe === 'undefined') {
             }
         }
 
-        // CORREGIDO: Procesamiento de pago mejorado
+        // MEJORADO: Procesamiento de pago con nueva tarjeta
         process_new_card_payment() {
             const me = this;
             
@@ -375,29 +446,62 @@ if (typeof frappe === 'undefined') {
                     return;
                 }
                 
-                // CORREGIR: Validar y obtener amount correctamente
-                let amount = 0;
+                // NUEVO: Obtener datos del cliente de múltiples fuentes
+                let customer_data = me.customer_data;
                 
-                // Intentar obtener amount de diferentes fuentes
-                if (frappe.route_options && frappe.route_options.amount) {
-                    amount = frappe.route_options.amount;
-                } else if (frappe.route_options && frappe.route_options.grand_total) {
-                    amount = frappe.route_options.grand_total;
-                } else if (cur_frm && cur_frm.doc && cur_frm.doc.grand_total) {
-                    amount = cur_frm.doc.grand_total;
-                } else if (cur_frm && cur_frm.doc && cur_frm.doc.outstanding_amount) {
-                    amount = cur_frm.doc.outstanding_amount;
+                if (!customer_data) {
+                    // Intentar obtener de frappe.route_options
+                    customer_data = {
+                        customer: frappe.route_options?.customer || frappe.route_options?.party,
+                        amount: frappe.route_options?.amount || frappe.route_options?.grand_total,
+                        currency: frappe.route_options?.currency || "USD",
+                        reference_doctype: frappe.route_options?.reference_doctype || "Payment Request",
+                        reference_docname: frappe.route_options?.reference_docname || frappe.route_options?.name
+                    };
                 }
                 
-                // Validar que amount sea válido
-                if (!amount || parseFloat(amount) <= 0) {
+                // Si aún no tenemos datos, intentar desde localStorage
+                if (!customer_data.customer) {
+                    const stored_data = localStorage.getItem('usp_payment_data');
+                    if (stored_data) {
+                        try {
+                            const parsed_data = JSON.parse(stored_data);
+                            customer_data = {
+                                customer: parsed_data.customer || parsed_data.party,
+                                amount: parsed_data.amount || parsed_data.grand_total,
+                                currency: parsed_data.currency || "USD",
+                                reference_doctype: parsed_data.reference_doctype || "Payment Request",
+                                reference_docname: parsed_data.reference_docname || parsed_data.name
+                            };
+                        } catch (e) {
+                            console.error('Error parsing stored data:', e);
+                        }
+                    }
+                }
+                
+                // Validar que tenemos datos del cliente
+                if (!customer_data.customer) {
                     frappe.msgprint({
                         title: __("Error de Validación"),
-                        message: __("No se pudo determinar el monto del pago. Monto actual: {0}", [amount || "undefined"]),
+                        message: __("No se encontraron datos del cliente. Por favor, recarga la página e intenta nuevamente."),
                         indicator: "red"
                     });
-                    console.error("Datos de ruta disponibles:", frappe.route_options);
-                    console.error("Datos del formulario:", cur_frm ? cur_frm.doc : "No disponible");
+                    console.error("Datos disponibles:", {
+                        route_options: frappe.route_options,
+                        customer_data: me.customer_data,
+                        stored_data: localStorage.getItem('usp_payment_data')
+                    });
+                    return;
+                }
+                
+                // Validar amount
+                const amount = parseFloat(customer_data.amount);
+                if (!amount || amount <= 0) {
+                    frappe.msgprint({
+                        title: __("Error de Validación"),
+                        message: __("Monto inválido: {0}", [customer_data.amount]),
+                        indicator: "red"
+                    });
                     return;
                 }
                 
@@ -430,13 +534,13 @@ if (typeof frappe === 'undefined') {
                 // Mostrar indicador de carga
                 frappe.show_progress(__("Procesando pago"), 30, 100, __("Validando datos..."));
                 
-                // CORREGIR: Preparar datos para el pago con validación completa
+                // Preparar datos para el pago
                 const payment_data = {
-                    amount: parseFloat(amount),
-                    currency: frappe.route_options?.currency || "USD",
-                    customer: frappe.route_options?.customer || frappe.route_options?.party,
-                    reference_doctype: frappe.route_options?.reference_doctype || "Payment Request",
-                    reference_docname: frappe.route_options?.reference_docname || frappe.route_options?.name,
+                    amount: amount,
+                    currency: customer_data.currency,
+                    customer: customer_data.customer,
+                    reference_doctype: customer_data.reference_doctype,
+                    reference_docname: customer_data.reference_docname,
                     
                     card_data: {
                         card_number: values.card_number.replace(/\s/g, ''),
@@ -449,18 +553,7 @@ if (typeof frappe === 'undefined') {
                 };
                 
                 // Log para debug
-                console.log("Datos del pago preparados:", payment_data);
-                
-                // Validar que todos los datos críticos estén presentes
-                if (!payment_data.customer) {
-                    frappe.msgprint({
-                        title: __("Error de Validación"),
-                        message: __("No se pudo identificar el cliente para el pago"),
-                        indicator: "red"
-                    });
-                    frappe.hide_progress();
-                    return;
-                }
+                console.log("Datos del pago final:", payment_data);
                 
                 // Procesar pago
                 frappe.call({
@@ -472,6 +565,9 @@ if (typeof frappe === 'undefined') {
                         frappe.hide_progress();
                         
                         if (r.message && r.message.success) {
+                            // Limpiar localStorage
+                            localStorage.removeItem('usp_payment_data');
+                            
                             frappe.msgprint({
                                 title: __("Pago Exitoso"),
                                 message: __("Su pago ha sido procesado exitosamente. ID: {0}", [r.message.transaction_id]),
@@ -569,6 +665,35 @@ if (typeof frappe === 'undefined') {
                 }
             });
         }
+
+        // NUEVO: Función de debug para verificar datos
+        debug_payment_data() {
+            const debug_info = {
+                route_options: frappe.route_options,
+                customer_data: this.customer_data,
+                stored_data: localStorage.getItem('usp_payment_data'),
+                current_form: cur_frm ? {
+                    doctype: cur_frm.doc.doctype,
+                    name: cur_frm.doc.name,
+                    party: cur_frm.doc.party,
+                    customer: cur_frm.doc.customer,
+                    grand_total: cur_frm.doc.grand_total
+                } : null,
+                timestamp: new Date().toISOString()
+            };
+            
+            console.log("=== DEBUG PAYMENT DATA ===");
+            console.log(debug_info);
+            console.log("=========================");
+            
+            frappe.msgprint({
+                title: __("Debug Info"),
+                message: `<pre>${JSON.stringify(debug_info, null, 2)}</pre>`,
+                indicator: "blue"
+            });
+            
+            return debug_info;
+        }
     };
 
     // Función para asegurar que el gateway esté disponible
@@ -602,6 +727,34 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
             try {
                 if (frm.doc.docstatus === 1 && frm.doc.status !== "Paid") {
                     frm.add_custom_button(__("Pagar con USP"), function() {
+                        
+                        // NUEVO: Preparar datos del cliente desde el Payment Request
+                        const customer_data = {
+                            customer: frm.doc.party,
+                            customer_name: frm.doc.party_name,
+                            amount: frm.doc.grand_total,
+                            currency: frm.doc.currency,
+                            reference_doctype: frm.doc.doctype,
+                            reference_docname: frm.doc.name
+                        };
+                        
+                        // Validar datos
+                        if (!customer_data.customer) {
+                            frappe.msgprint({
+                                title: __("Error"),
+                                message: __("No se encontró información del cliente en el Payment Request"),
+                                indicator: "red"
+                            });
+                            return;
+                        }
+                        
+                        // Guardar en localStorage
+                        localStorage.setItem('usp_payment_data', JSON.stringify(customer_data));
+                        
+                        // Establecer route_options
+                        frappe.route_options = customer_data;
+                        
+                        // Obtener gateway y configurar
                         const gateway = gateway_usp.ensure_gateway();
                         
                         if (gateway && gateway.initialized) {
@@ -626,6 +779,17 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
             try {
                 if (frm.doc.docstatus === 1 && frm.doc.outstanding_amount > 0) {
                     frm.add_custom_button(__("Pagar con USP"), function() {
+                        
+                        // NUEVO: Validar datos antes de proceder
+                        if (!frm.doc.customer) {
+                            frappe.msgprint({
+                                title: __("Error"),
+                                message: __("No se encontró información del cliente en la factura"),
+                                indicator: "red"
+                            });
+                            return;
+                        }
+                        
                         frappe.show_progress(__('Creando Payment Request...'), 30);
                         
                         frappe.call({
@@ -639,21 +803,33 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
                                 frappe.hide_progress();
                                 
                                 if (r.message) {
-                                    // NUEVO: Establecer datos de ruta antes de navegar
-                                    frappe.route_options = {
+                                    // NUEVO: Establecer datos completos de ruta
+                                    const payment_route_data = {
                                         name: r.message.name,
                                         amount: frm.doc.outstanding_amount,
                                         currency: frm.doc.currency,
                                         customer: frm.doc.customer,
+                                        customer_name: frm.doc.customer_name || frm.doc.customer,
                                         reference_doctype: frm.doc.doctype,
                                         reference_docname: frm.doc.name,
                                         party: frm.doc.customer,
-                                        grand_total: frm.doc.outstanding_amount
+                                        grand_total: frm.doc.outstanding_amount,
+                                        // Datos adicionales para debugging
+                                        contact_email: frm.doc.contact_email,
+                                        contact_person: frm.doc.contact_person,
+                                        territory: frm.doc.territory
                                     };
                                     
-                                    // Log para debug
-                                    console.log("Datos de ruta establecidos:", frappe.route_options);
+                                    // Guardar en localStorage como respaldo
+                                    localStorage.setItem('usp_payment_data', JSON.stringify(payment_route_data));
                                     
+                                    // Establecer route_options
+                                    frappe.route_options = payment_route_data;
+                                    
+                                    // Log para debug
+                                    console.log("Datos de pago establecidos:", payment_route_data);
+                                    
+                                    // Navegar al Payment Request
                                     frappe.set_route('Form', 'Payment Request', r.message.name);
                                 } else {
                                     frappe.msgprint({
