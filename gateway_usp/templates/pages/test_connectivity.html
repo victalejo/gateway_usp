@@ -68,9 +68,31 @@
             padding: 4px 8px;
             border-radius: 12px;
         }
+        .debug-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
+    <!-- NUEVO: Variables de configuración de Python -->
+    <script>
+        // Configuración del sistema desde Python
+        window.USP_CONFIG = {
+            csrf_token: "{{ csrf_token }}",
+            sid: "{{ sid }}",
+            user: "{{ frappe.session.user }}",
+            gateway_enabled: {{ gateway_enabled|lower }},
+            environment: "{{ environment }}",
+            use_mock: {{ use_mock|lower }}
+        };
+    </script>
+
     <div class="header-banner">
         <div class="container">
             <h1><i class="fas fa-network-wired"></i> USP Gateway - Pruebas de Conectividad</h1>
@@ -79,6 +101,27 @@
     </div>
 
     <div class="container mt-4">
+        <!-- Información de Debug -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h6><i class="fas fa-info-circle"></i> Información de Sesión</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="debug-info">
+                            <strong>Usuario:</strong> {{ frappe.session.user }}<br>
+                            <strong>Gateway Habilitado:</strong> {{ gateway_enabled }}<br>
+                            <strong>Ambiente:</strong> {{ environment }}<br>
+                            <strong>Modo Mock:</strong> {{ use_mock }}<br>
+                            <strong>CSRF Token:</strong> {{ csrf_token[:20] }}...<br>
+                            <strong>Session ID:</strong> {{ sid[:20] }}...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Resumen General -->
         <div class="row mb-4">
             <div class="col-12">
@@ -94,6 +137,9 @@
                                 </button>
                                 <button class="btn btn-secondary btn-test" onclick="resetAllTests()">
                                     <i class="fas fa-redo"></i> Reiniciar
+                                </button>
+                                <button class="btn btn-info btn-test" onclick="testCSRFToken()">
+                                    <i class="fas fa-shield-alt"></i> Probar CSRF
                                 </button>
                             </div>
                             <div class="col-md-6 text-end">
@@ -167,7 +213,7 @@
                     </div>
                     <div class="card-body">
                         <p><strong>Documentación:</strong> CROEM API Token v6.5</p>
-                        <p><strong>Ambiente:</strong> <span id="environment-info">Cargando...</span></p>
+                        <p><strong>Ambiente:</strong> <span id="environment-info">{{ environment }}</span></p>
                         <p><strong>Timestamp:</strong> <span id="current-time"></span></p>
                     </div>
                 </div>
@@ -196,20 +242,27 @@
         // Variables globales
         let testResults = {};
         
-        // Función para hacer llamadas API usando fetch
+        // Función para hacer llamadas API con CSRF token
         async function makeAPICall(method, args = {}) {
             try {
-                const response = await fetch(`/api/method/${method}`, {
+                const formData = new FormData();
+                formData.append('method', method);
+                formData.append('args', JSON.stringify(args));
+                
+                const response = await fetch('/api/method/' + method, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'X-Frappe-CSRF-Token': window.USP_CONFIG.csrf_token,
+                        'X-Frappe-Session-ID': window.USP_CONFIG.sid,
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify(args)
+                    body: formData
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error('Response error:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 }
                 
                 const data = await response.json();
@@ -217,6 +270,30 @@
             } catch (error) {
                 console.error('API call failed:', error);
                 throw error;
+            }
+        }
+        
+        // Función para probar CSRF Token
+        async function testCSRFToken() {
+            showLoading('full-test-result', 'Probando CSRF Token...');
+            
+            try {
+                const response = await makeAPICall('frappe.auth.get_logged_user');
+                showResult('full-test-result', {
+                    success: true,
+                    message: 'CSRF Token válido',
+                    details: {
+                        user: response.message,
+                        csrf_token: window.USP_CONFIG.csrf_token.substring(0, 20) + '...',
+                        session_id: window.USP_CONFIG.sid.substring(0, 20) + '...'
+                    }
+                });
+            } catch (error) {
+                showResult('full-test-result', {
+                    success: false,
+                    message: 'Error con CSRF Token',
+                    error: error.message
+                });
             }
         }
         
@@ -516,21 +593,16 @@
         }
         
         // Inicialización
-        document.addEventListener('DOMContentLoaded', async function() {
+        document.addEventListener('DOMContentLoaded', function() {
             // Actualizar timestamp
             document.getElementById('current-time').textContent = new Date().toLocaleString('es-ES');
             
-            // Obtener información del ambiente
-            try {
-                const response = await makeAPICall('gateway_usp.utils.network_test.get_usp_configuration');
-                if (response.message && response.message.configuration) {
-                    document.getElementById('environment-info').textContent = 
-                        `${response.message.configuration.environment} ${response.message.configuration.use_mock ? '(Mock)' : ''}`;
-                }
-            } catch (error) {
-                console.error('Error obteniendo información del ambiente:', error);
-                document.getElementById('environment-info').textContent = 'Error cargando';
-            }
+            // Verificar configuración inicial
+            console.log('USP Config:', window.USP_CONFIG);
+            
+            // Mostrar información del ambiente
+            document.getElementById('environment-info').textContent = 
+                `${window.USP_CONFIG.environment} ${window.USP_CONFIG.use_mock ? '(Mock)' : ''}`;
         });
     </script>
 </body>

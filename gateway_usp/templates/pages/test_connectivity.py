@@ -21,6 +21,10 @@ def get_context(context):
         context.environment = "No configurado"
         context.use_mock = False
     
+    # NUEVO: Incluir token CSRF y datos de sesión
+    context.csrf_token = frappe.sessions.get_csrf_token()
+    context.sid = frappe.session.sid
+    
     # Configurar metadatos de la página
     context.page_title = "USP Gateway - Pruebas de Conectividad"
     context.description = "Herramienta de diagnóstico para probar la conectividad con USP Gateway basado en documentación CROEM API Token v6.5"
