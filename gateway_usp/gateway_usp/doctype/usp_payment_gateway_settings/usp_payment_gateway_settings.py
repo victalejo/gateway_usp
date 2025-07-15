@@ -17,23 +17,41 @@ class USPPaymentGatewaySettings(Document):
         """Validar campos requeridos cuando está habilitado"""
         # Verificar si se están usando credenciales CROEM o legacy
         if self.has_croem_credentials():
-            required_fields = ['api_key', 'access_code', 'merchant_account_number', 'terminal_name']
+            required_fields = ['api_key', 'merchant_account_number', 'terminal_name']
             missing_fields = []
             
             for field in required_fields:
                 if not self.get(field):
                     missing_fields.append(field)
+            
+            # Validar access_code por separado (campo Password)
+            if not self.get('access_code'):
+                try:
+                    access_code = self.get_password('access_code')
+                    if not access_code:
+                        missing_fields.append('access_code')
+                except:
+                    missing_fields.append('access_code')
             
             if missing_fields:
                 frappe.throw(f"Los siguientes campos CROEM son requeridos: {', '.join(missing_fields)}")
         
         elif self.has_legacy_credentials():
-            required_fields = ['merchant_id', 'secret_key']
+            required_fields = ['merchant_id']
             missing_fields = []
             
             for field in required_fields:
                 if not self.get(field):
                     missing_fields.append(field)
+            
+            # Validar secret_key por separado (campo Password)
+            if not self.get('secret_key'):
+                try:
+                    secret_key = self.get_password('secret_key')
+                    if not secret_key:
+                        missing_fields.append('secret_key')
+                except:
+                    missing_fields.append('secret_key')
             
             if missing_fields:
                 frappe.throw(f"Los siguientes campos legacy son requeridos: {', '.join(missing_fields)}")
@@ -43,11 +61,29 @@ class USPPaymentGatewaySettings(Document):
     
     def has_croem_credentials(self):
         """Verificar si tiene credenciales CROEM configuradas"""
-        return bool(self.get('api_key') and self.get('access_code'))
+        has_api_key = bool(self.get('api_key'))
+        has_access_code = False
+        
+        try:
+            access_code = self.get_password('access_code')
+            has_access_code = bool(access_code)
+        except:
+            has_access_code = False
+        
+        return has_api_key and has_access_code
     
     def has_legacy_credentials(self):
         """Verificar si tiene credenciales legacy configuradas"""
-        return bool(self.get('merchant_id') and self.get('secret_key'))
+        has_merchant_id = bool(self.get('merchant_id'))
+        has_secret_key = False
+        
+        try:
+            secret_key = self.get_password('secret_key')
+            has_secret_key = bool(secret_key)
+        except:
+            has_secret_key = False
+        
+        return has_merchant_id and has_secret_key
     
     def handle_compatibility(self):
         """Manejar compatibilidad entre campos CROEM y legacy"""
@@ -55,8 +91,6 @@ class USPPaymentGatewaySettings(Document):
         if self.has_croem_credentials():
             if not self.merchant_id:
                 self.merchant_id = self.merchant_account_number
-            if not self.secret_key:
-                self.secret_key = self.access_code
             if not self.terminal_id:
                 self.terminal_id = self.terminal_name
         
@@ -164,9 +198,16 @@ class USPPaymentGatewaySettings(Document):
         if self.has_legacy_credentials() and not self.has_croem_credentials():
             # Mapear campos legacy a CROEM
             self.api_key = self.merchant_id
-            self.access_code = self.secret_key
             self.merchant_account_number = self.merchant_id
             self.terminal_name = self.terminal_id or f"TERM_{self.merchant_id}"
+            
+            # Copiar contraseñas
+            try:
+                secret_key = self.get_password('secret_key')
+                if secret_key:
+                    self.access_code = secret_key
+            except:
+                pass
             
             # Guardar cambios
             self.save()
@@ -185,3 +226,19 @@ class USPPaymentGatewaySettings(Document):
                 title="Migración No Requerida"
             )
             return False
+    
+    @frappe.whitelist()
+    def reset_password_fields(self):
+        """Resetear campos de contraseña si hay problemas"""
+        try:
+            if self.access_code:
+                self.set_password('access_code', self.access_code)
+            if self.secret_key:
+                self.set_password('secret_key', self.secret_key)
+            
+            self.save()
+            frappe.msgprint("Campos de contraseña reseteados exitosamente", indicator="green")
+            
+        except Exception as e:
+            frappe.log_error(f"Error reseteando contraseñas: {str(e)}")
+            frappe.msgprint(f"Error reseteando contraseñas: {str(e)}", indicator="red")

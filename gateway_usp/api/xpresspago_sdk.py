@@ -377,7 +377,7 @@ class TransactionManager:
         )
 
 
-# Función actualizada para obtener SDK con manejo de errores
+# Función actualizada para obtener SDK con manejo de errores mejorado
 def get_xpresspago_sdk():
     """Obtiene una instancia configurada del SDK con manejo de errores mejorado"""
     try:
@@ -389,7 +389,7 @@ def get_xpresspago_sdk():
         # Verificar si usar modo mock
         use_mock = frappe.conf.get('usp_use_mock', False) or settings.get('use_mock_mode', False)
         
-        # Obtener credenciales con manejo de errores
+        # Obtener credenciales con manejo de errores mejorado
         api_key = None
         access_code = None
         merchant_account_number = None
@@ -399,16 +399,24 @@ def get_xpresspago_sdk():
         try:
             if settings.get('api_key'):
                 api_key = settings.get('api_key')
+            
             if settings.get('access_code'):
+                # Primero intentar obtener del campo directo
+                access_code = settings.get('access_code')
+            
+            # Si no está en el campo directo, intentar obtener como contraseña
+            if not access_code:
                 try:
                     access_code = settings.get_password("access_code")
-                except frappe.exceptions.ValidationError:
-                    frappe.log_error("Access code no encontrado, usando valor por defecto")
+                except Exception as e:
+                    frappe.log_error(f"Error obteniendo access_code: {str(e)}")
                     access_code = None
+            
             if settings.get('merchant_account_number'):
                 merchant_account_number = settings.get('merchant_account_number')
             if settings.get('terminal_name'):
                 terminal_name = settings.get('terminal_name')
+                
         except Exception as e:
             frappe.log_error(f"Error obteniendo credenciales CROEM: {str(e)}")
         
@@ -416,13 +424,20 @@ def get_xpresspago_sdk():
         if not api_key or not access_code:
             try:
                 api_key = api_key or settings.get('merchant_id')
-                try:
-                    access_code = access_code or settings.get_password("secret_key")
-                except frappe.exceptions.ValidationError:
-                    frappe.log_error("Secret key no encontrado, usando valor por defecto")
-                    access_code = None
                 merchant_account_number = merchant_account_number or settings.get('merchant_id')
                 terminal_name = terminal_name or settings.get('terminal_id')
+                
+                if not access_code:
+                    # Intentar obtener secret_key
+                    if settings.get('secret_key'):
+                        access_code = settings.get('secret_key')
+                    else:
+                        try:
+                            access_code = settings.get_password("secret_key")
+                        except Exception as e:
+                            frappe.log_error(f"Error obteniendo secret_key: {str(e)}")
+                            access_code = None
+                            
             except Exception as e:
                 frappe.log_error(f"Error obteniendo credenciales legacy: {str(e)}")
         

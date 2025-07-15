@@ -4,6 +4,61 @@ import frappe
 from gateway_usp.api.xpresspago_sdk import get_xpresspago_sdk
 
 @frappe.whitelist()
+def verify_password_fields():
+    """Verificar acceso a campos de contraseña en USP Settings"""
+    try:
+        settings = frappe.get_single("USP Payment Gateway Settings")
+        
+        results = {
+            "success": True,
+            "access_code_status": "not_configured",
+            "secret_key_status": "not_configured",
+            "errors": []
+        }
+        
+        # Verificar access_code
+        if settings.get('access_code'):
+            try:
+                access_code = settings.get_password('access_code')
+                if access_code:
+                    results["access_code_status"] = "ok"
+                else:
+                    results["access_code_status"] = "field_only"
+                    results["errors"].append("access_code: campo visible pero contraseña vacía")
+            except Exception as e:
+                results["access_code_status"] = "error"
+                results["errors"].append(f"access_code: error accediendo ({str(e)})")
+        
+        # Verificar secret_key  
+        if settings.get('secret_key'):
+            try:
+                secret_key = settings.get_password('secret_key')
+                if secret_key:
+                    results["secret_key_status"] = "ok"
+                else:
+                    results["secret_key_status"] = "field_only"
+                    results["errors"].append("secret_key: campo visible pero contraseña vacía")
+            except Exception as e:
+                results["secret_key_status"] = "error"
+                results["errors"].append(f"secret_key: error accediendo ({str(e)})")
+        
+        if results["errors"]:
+            results["success"] = False
+            results["message"] = f"Problemas detectados en campos de contraseña: {'; '.join(results['errors'])}"
+        else:
+            results["message"] = "Campos de contraseña configurados correctamente"
+        
+        return results
+        
+    except Exception as e:
+        frappe.log_error(f"Error verificando campos de contraseña: {str(e)}")
+        return {
+            "success": False,
+            "message": "Error verificando campos de contraseña",
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_usp_connectivity():
     """Prueba conectividad usando método Ping de la documentación CROEM"""
     try:
@@ -164,31 +219,55 @@ def get_usp_configuration():
     try:
         settings = frappe.get_single("USP Payment Gateway Settings")
         
+        # Verificar campos de contraseña
+        password_check = verify_password_fields()
+        
         config_info = {
             "is_enabled": settings.is_enabled,
             "environment": settings.environment,
+            "use_mock": frappe.conf.get('usp_use_mock', False),
+            "password_fields_status": password_check,
+            # Credenciales CROEM
+            "api_key": f"***{settings.api_key[-4:]}" if settings.api_key else "No configurado",
+            "merchant_account_number": settings.merchant_account_number or "No configurado",
+            "terminal_name": settings.terminal_name or "No configurado",
+            "has_access_code": password_check.get("access_code_status") == "ok",
+            # Credenciales Legacy
             "merchant_id": f"***{settings.merchant_id[-4:]}" if settings.merchant_id else "No configurado",
-            "terminal_id": settings.terminal_id,
-            "has_secret_key": bool(settings.get_password("secret_key")),
-            "use_mock": frappe.conf.get('usp_use_mock', False)
+            "terminal_id": settings.terminal_id or "No configurado", 
+            "has_secret_key": password_check.get("secret_key_status") == "ok"
         }
         
         # Validar configuración
         errors = []
         if not settings.is_enabled:
             errors.append("Gateway USP no está habilitado")
-        if not settings.merchant_id:
-            errors.append("Merchant ID no configurado")
-        if not settings.get_password("secret_key"):
-            errors.append("Secret Key no configurado")
-        if not settings.terminal_id:
-            errors.append("Terminal ID no configurado")
+        
+        # Verificar si tiene credenciales CROEM válidas
+        has_croem = (settings.api_key and 
+                     settings.merchant_account_number and 
+                     settings.terminal_name and 
+                     password_check.get("access_code_status") == "ok")
+        
+        # Verificar si tiene credenciales legacy válidas
+        has_legacy = (settings.merchant_id and 
+                      settings.terminal_id and 
+                      password_check.get("secret_key_status") == "ok")
+        
+        if not has_croem and not has_legacy:
+            errors.append("No hay credenciales válidas configuradas (ni CROEM ni legacy)")
+        
+        # Agregar errores de campos de contraseña
+        if not password_check.get("success"):
+            errors.extend(password_check.get("errors", []))
         
         return {
             "success": len(errors) == 0,
             "message": "Configuración válida" if len(errors) == 0 else "Errores en configuración",
             "configuration": config_info,
-            "errors": errors
+            "errors": errors,
+            "has_croem_credentials": has_croem,
+            "has_legacy_credentials": has_legacy
         }
     
     except Exception as e:
