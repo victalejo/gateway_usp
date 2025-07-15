@@ -49,6 +49,7 @@ fixtures = [
 # Website
 website_route_rules = [
     {"from_route": "/usp-payment/<path:path>", "to_route": "usp-payment"},
+    {"from_route": "/test_connectivity", "to_route": "test_connectivity"},
 ]
 
 # Scheduler Events

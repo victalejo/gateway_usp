@@ -196,6 +196,30 @@
         // Variables globales
         let testResults = {};
         
+        // Función para hacer llamadas API usando fetch
+        async function makeAPICall(method, args = {}) {
+            try {
+                const response = await fetch(`/api/method/${method}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(args)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+        
         // Función para mostrar loading
         function showLoading(elementId, message = "Ejecutando prueba...") {
             const element = document.getElementById(elementId);
@@ -231,232 +255,226 @@
         }
         
         // Test de configuración
-        function testConfiguration() {
+        async function testConfiguration() {
             showLoading('config-result', 'Verificando configuración...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.get_usp_configuration",
-                callback: function(r) {
-                    testResults.configuration = r.message;
-                    showResult('config-result', {
-                        success: r.message.success,
-                        message: r.message.message,
-                        error: r.message.errors ? r.message.errors.join(', ') : null,
-                        details: r.message.configuration
-                    });
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    showResult('config-result', {
-                        success: false,
-                        message: 'Error verificando configuración',
-                        error: r.message || 'Error desconocido'
-                    });
-                }
-            });
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.get_usp_configuration');
+                const result = response.message;
+                
+                testResults.configuration = result;
+                showResult('config-result', {
+                    success: result.success,
+                    message: result.message,
+                    error: result.errors ? result.errors.join(', ') : null,
+                    details: result.configuration
+                });
+                updateOverallStatus();
+            } catch (error) {
+                showResult('config-result', {
+                    success: false,
+                    message: 'Error verificando configuración',
+                    error: error.message || 'Error desconocido'
+                });
+            }
         }
         
         // Test de ping
-        function testPing() {
+        async function testPing() {
             showLoading('ping-result', 'Probando conectividad...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.test_usp_connectivity",
-                callback: function(r) {
-                    testResults.ping = r.message;
-                    showResult('ping-result', {
-                        success: r.message.success,
-                        message: r.message.message,
-                        error: r.message.error,
-                        details: {
-                            ping_result: r.message.ping_result,
-                            response_code: r.message.response_code,
-                            environment: r.message.environment,
-                            api_key: r.message.api_key
-                        }
-                    });
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    showResult('ping-result', {
-                        success: false,
-                        message: 'Error en prueba de ping',
-                        error: r.message || 'Error desconocido'
-                    });
-                }
-            });
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.test_usp_connectivity');
+                const result = response.message;
+                
+                testResults.ping = result;
+                showResult('ping-result', {
+                    success: result.success,
+                    message: result.message,
+                    error: result.error,
+                    details: {
+                        ping_result: result.ping_result,
+                        response_code: result.response_code,
+                        environment: result.environment,
+                        api_key: result.api_key
+                    }
+                });
+                updateOverallStatus();
+            } catch (error) {
+                showResult('ping-result', {
+                    success: false,
+                    message: 'Error en prueba de ping',
+                    error: error.message || 'Error desconocido'
+                });
+            }
         }
         
         // Test de widget
-        function testWidget() {
+        async function testWidget() {
             showLoading('widget-result', 'Probando widget...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.test_widget_loading",
-                callback: function(r) {
-                    testResults.widget = r.message;
-                    showResult('widget-result', {
-                        success: r.message.success,
-                        message: r.message.message,
-                        error: r.message.error,
-                        details: {
-                            has_html: r.message.has_html,
-                            response_code: r.message.response_code,
-                            html_length: r.message.html_length
-                        }
-                    });
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    showResult('widget-result', {
-                        success: false,
-                        message: 'Error probando widget',
-                        error: r.message || 'Error desconocido'
-                    });
-                }
-            });
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.test_widget_loading');
+                const result = response.message;
+                
+                testResults.widget = result;
+                showResult('widget-result', {
+                    success: result.success,
+                    message: result.message,
+                    error: result.error,
+                    details: {
+                        has_html: result.has_html,
+                        response_code: result.response_code,
+                        html_length: result.html_length
+                    }
+                });
+                updateOverallStatus();
+            } catch (error) {
+                showResult('widget-result', {
+                    success: false,
+                    message: 'Error probando widget',
+                    error: error.message || 'Error desconocido'
+                });
+            }
         }
         
         // Test de token details
-        function testTokenDetails() {
+        async function testTokenDetails() {
             showLoading('token-result', 'Probando token details...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.test_token_details",
-                callback: function(r) {
-                    testResults.tokenDetails = r.message;
-                    showResult('token-result', {
-                        success: r.message.success,
-                        message: r.message.message,
-                        error: r.message.error,
-                        details: {
-                            account_token: r.message.account_token,
-                            card_number: r.message.card_number,
-                            cardholder_name: r.message.cardholder_name,
-                            response_code: r.message.response_code
-                        }
-                    });
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    showResult('token-result', {
-                        success: false,
-                        message: 'Error probando token details',
-                        error: r.message || 'Error desconocido'
-                    });
-                }
-            });
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.test_token_details');
+                const result = response.message;
+                
+                testResults.tokenDetails = result;
+                showResult('token-result', {
+                    success: result.success,
+                    message: result.message,
+                    error: result.error,
+                    details: {
+                        account_token: result.account_token,
+                        card_number: result.card_number,
+                        cardholder_name: result.cardholder_name,
+                        response_code: result.response_code
+                    }
+                });
+                updateOverallStatus();
+            } catch (error) {
+                showResult('token-result', {
+                    success: false,
+                    message: 'Error probando token details',
+                    error: error.message || 'Error desconocido'
+                });
+            }
         }
         
         // Test de transacción
-        function testTransaction() {
+        async function testTransaction() {
             showLoading('transaction-result', 'Probando transacción...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.test_mock_transaction",
-                callback: function(r) {
-                    testResults.transaction = r.message;
-                    showResult('transaction-result', {
-                        success: r.message.success,
-                        message: r.message.message,
-                        error: r.message.error,
-                        details: {
-                            transaction_id: r.message.transaction_id,
-                            amount: r.message.amount,
-                            status: r.message.status,
-                            response_code: r.message.response_code
-                        }
-                    });
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    showResult('transaction-result', {
-                        success: false,
-                        message: 'Error probando transacción',
-                        error: r.message || 'Error desconocido'
-                    });
-                }
-            });
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.test_mock_transaction');
+                const result = response.message;
+                
+                testResults.transaction = result;
+                showResult('transaction-result', {
+                    success: result.success,
+                    message: result.message,
+                    error: result.error,
+                    details: {
+                        transaction_id: result.transaction_id,
+                        amount: result.amount,
+                        status: result.status,
+                        response_code: result.response_code
+                    }
+                });
+                updateOverallStatus();
+            } catch (error) {
+                showResult('transaction-result', {
+                    success: false,
+                    message: 'Error probando transacción',
+                    error: error.message || 'Error desconocido'
+                });
+            }
         }
         
         // Ejecutar todas las pruebas
-        function runFullTest() {
+        async function runFullTest() {
             showLoading('full-test-result', 'Ejecutando todas las pruebas...');
             
-            frappe.call({
-                method: "gateway_usp.utils.network_test.run_full_connectivity_test",
-                callback: function(r) {
-                    testResults = r.message.tests || {};
-                    
-                    const overallSuccess = r.message.overall_success;
-                    const cssClass = overallSuccess ? 'success' : 'error';
-                    const icon = overallSuccess ? 'fa-check-circle' : 'fa-times-circle';
-                    
-                    document.getElementById('full-test-result').innerHTML = `
-                        <div class="test-result ${cssClass}">
-                            <i class="fas ${icon}"></i> 
-                            <strong>${overallSuccess ? 'Todas las pruebas completadas exitosamente' : 'Algunas pruebas fallaron'}</strong>
-                            <br><small>Timestamp: ${r.message.timestamp}</small>
-                        </div>
-                    `;
-                    
-                    // Actualizar resultados individuales
-                    if (testResults.configuration) {
-                        showResult('config-result', {
-                            success: testResults.configuration.success,
-                            message: testResults.configuration.message,
-                            error: testResults.configuration.errors ? testResults.configuration.errors.join(', ') : null,
-                            details: testResults.configuration.configuration
-                        });
-                    }
-                    
-                    if (testResults.connectivity) {
-                        showResult('ping-result', {
-                            success: testResults.connectivity.success,
-                            message: testResults.connectivity.message,
-                            error: testResults.connectivity.error,
-                            details: testResults.connectivity
-                        });
-                    }
-                    
-                    if (testResults.widget) {
-                        showResult('widget-result', {
-                            success: testResults.widget.success,
-                            message: testResults.widget.message,
-                            error: testResults.widget.error,
-                            details: testResults.widget
-                        });
-                    }
-                    
-                    if (testResults.token_details) {
-                        showResult('token-result', {
-                            success: testResults.token_details.success,
-                            message: testResults.token_details.message,
-                            error: testResults.token_details.error,
-                            details: testResults.token_details
-                        });
-                    }
-                    
-                    if (testResults.transaction) {
-                        showResult('transaction-result', {
-                            success: testResults.transaction.success,
-                            message: testResults.transaction.message,
-                            error: testResults.transaction.error,
-                            details: testResults.transaction
-                        });
-                    }
-                    
-                    updateOverallStatus();
-                },
-                error: function(r) {
-                    document.getElementById('full-test-result').innerHTML = `
-                        <div class="test-result error">
-                            <i class="fas fa-times-circle"></i> Error ejecutando pruebas completas
-                            <br><small>Error: ${r.message || 'Error desconocido'}</small>
-                        </div>
-                    `;
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.run_full_connectivity_test');
+                const result = response.message;
+                
+                testResults = result.tests || {};
+                
+                const overallSuccess = result.overall_success;
+                const cssClass = overallSuccess ? 'success' : 'error';
+                const icon = overallSuccess ? 'fa-check-circle' : 'fa-times-circle';
+                
+                document.getElementById('full-test-result').innerHTML = `
+                    <div class="test-result ${cssClass}">
+                        <i class="fas ${icon}"></i> 
+                        <strong>${overallSuccess ? 'Todas las pruebas completadas exitosamente' : 'Algunas pruebas fallaron'}</strong>
+                        <br><small>Timestamp: ${result.timestamp}</small>
+                    </div>
+                `;
+                
+                // Actualizar resultados individuales
+                if (testResults.configuration) {
+                    showResult('config-result', {
+                        success: testResults.configuration.success,
+                        message: testResults.configuration.message,
+                        error: testResults.configuration.errors ? testResults.configuration.errors.join(', ') : null,
+                        details: testResults.configuration.configuration
+                    });
                 }
-            });
+                
+                if (testResults.connectivity) {
+                    showResult('ping-result', {
+                        success: testResults.connectivity.success,
+                        message: testResults.connectivity.message,
+                        error: testResults.connectivity.error,
+                        details: testResults.connectivity
+                    });
+                }
+                
+                if (testResults.widget) {
+                    showResult('widget-result', {
+                        success: testResults.widget.success,
+                        message: testResults.widget.message,
+                        error: testResults.widget.error,
+                        details: testResults.widget
+                    });
+                }
+                
+                if (testResults.token_details) {
+                    showResult('token-result', {
+                        success: testResults.token_details.success,
+                        message: testResults.token_details.message,
+                        error: testResults.token_details.error,
+                        details: testResults.token_details
+                    });
+                }
+                
+                if (testResults.transaction) {
+                    showResult('transaction-result', {
+                        success: testResults.transaction.success,
+                        message: testResults.transaction.message,
+                        error: testResults.transaction.error,
+                        details: testResults.transaction
+                    });
+                }
+                
+                updateOverallStatus();
+            } catch (error) {
+                document.getElementById('full-test-result').innerHTML = `
+                    <div class="test-result error">
+                        <i class="fas fa-times-circle"></i> Error ejecutando pruebas completas
+                        <br><small>Error: ${error.message || 'Error desconocido'}</small>
+                    </div>
+                `;
+            }
         }
         
         // Reiniciar todas las pruebas
@@ -498,20 +516,21 @@
         }
         
         // Inicialización
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // Actualizar timestamp
             document.getElementById('current-time').textContent = new Date().toLocaleString('es-ES');
             
             // Obtener información del ambiente
-            frappe.call({
-                method: "gateway_usp.utils.network_test.get_usp_configuration",
-                callback: function(r) {
-                    if (r.message && r.message.configuration) {
-                        document.getElementById('environment-info').textContent = 
-                            `${r.message.configuration.environment} ${r.message.configuration.use_mock ? '(Mock)' : ''}`;
-                    }
+            try {
+                const response = await makeAPICall('gateway_usp.utils.network_test.get_usp_configuration');
+                if (response.message && response.message.configuration) {
+                    document.getElementById('environment-info').textContent = 
+                        `${response.message.configuration.environment} ${response.message.configuration.use_mock ? '(Mock)' : ''}`;
                 }
-            });
+            } catch (error) {
+                console.error('Error obteniendo información del ambiente:', error);
+                document.getElementById('environment-info').textContent = 'Error cargando';
+            }
         });
     </script>
 </body>
