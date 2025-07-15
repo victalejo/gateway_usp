@@ -375,6 +375,32 @@ if (typeof frappe === 'undefined') {
                     return;
                 }
                 
+                // CORREGIR: Validar y obtener amount correctamente
+                let amount = 0;
+                
+                // Intentar obtener amount de diferentes fuentes
+                if (frappe.route_options && frappe.route_options.amount) {
+                    amount = frappe.route_options.amount;
+                } else if (frappe.route_options && frappe.route_options.grand_total) {
+                    amount = frappe.route_options.grand_total;
+                } else if (cur_frm && cur_frm.doc && cur_frm.doc.grand_total) {
+                    amount = cur_frm.doc.grand_total;
+                } else if (cur_frm && cur_frm.doc && cur_frm.doc.outstanding_amount) {
+                    amount = cur_frm.doc.outstanding_amount;
+                }
+                
+                // Validar que amount sea válido
+                if (!amount || parseFloat(amount) <= 0) {
+                    frappe.msgprint({
+                        title: __("Error de Validación"),
+                        message: __("No se pudo determinar el monto del pago. Monto actual: {0}", [amount || "undefined"]),
+                        indicator: "red"
+                    });
+                    console.error("Datos de ruta disponibles:", frappe.route_options);
+                    console.error("Datos del formulario:", cur_frm ? cur_frm.doc : "No disponible");
+                    return;
+                }
+                
                 // Validar número de tarjeta
                 if (!me.validate_card_number(values.card_number)) {
                     frappe.msgprint(__("Número de tarjeta inválido"));
@@ -402,15 +428,15 @@ if (typeof frappe === 'undefined') {
                 dialog.hide();
                 
                 // Mostrar indicador de carga
-                frappe.show_progress(__("Procesando pago"), 30, 100, __("Validando tarjeta..."));
+                frappe.show_progress(__("Procesando pago"), 30, 100, __("Validando datos..."));
                 
-                // Preparar datos para el pago
+                // CORREGIR: Preparar datos para el pago con validación completa
                 const payment_data = {
-                    amount: frappe.route_options?.amount || 0,
+                    amount: parseFloat(amount),
                     currency: frappe.route_options?.currency || "USD",
-                    customer: frappe.route_options?.customer,
-                    reference_doctype: "Payment Request",
-                    reference_docname: frappe.route_options?.name,
+                    customer: frappe.route_options?.customer || frappe.route_options?.party,
+                    reference_doctype: frappe.route_options?.reference_doctype || "Payment Request",
+                    reference_docname: frappe.route_options?.reference_docname || frappe.route_options?.name,
                     
                     card_data: {
                         card_number: values.card_number.replace(/\s/g, ''),
@@ -421,6 +447,20 @@ if (typeof frappe === 'undefined') {
                         save_card: values.save_card || false
                     }
                 };
+                
+                // Log para debug
+                console.log("Datos del pago preparados:", payment_data);
+                
+                // Validar que todos los datos críticos estén presentes
+                if (!payment_data.customer) {
+                    frappe.msgprint({
+                        title: __("Error de Validación"),
+                        message: __("No se pudo identificar el cliente para el pago"),
+                        indicator: "red"
+                    });
+                    frappe.hide_progress();
+                    return;
+                }
                 
                 // Procesar pago
                 frappe.call({
@@ -599,6 +639,21 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
                                 frappe.hide_progress();
                                 
                                 if (r.message) {
+                                    // NUEVO: Establecer datos de ruta antes de navegar
+                                    frappe.route_options = {
+                                        name: r.message.name,
+                                        amount: frm.doc.outstanding_amount,
+                                        currency: frm.doc.currency,
+                                        customer: frm.doc.customer,
+                                        reference_doctype: frm.doc.doctype,
+                                        reference_docname: frm.doc.name,
+                                        party: frm.doc.customer,
+                                        grand_total: frm.doc.outstanding_amount
+                                    };
+                                    
+                                    // Log para debug
+                                    console.log("Datos de ruta establecidos:", frappe.route_options);
+                                    
                                     frappe.set_route('Form', 'Payment Request', r.message.name);
                                 } else {
                                     frappe.msgprint({

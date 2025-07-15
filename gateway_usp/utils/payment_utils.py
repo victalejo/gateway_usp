@@ -151,12 +151,14 @@ def get_payment_request_type_options():
 
 @frappe.whitelist()
 def create_payment_request_with_usp(doc, amount, currency="USD"):
-    """Crea un Payment Request con USP habilitado"""
+    """Crea un Payment Request con USP habilitado - MEJORADO"""
     try:
         # Validar parámetros
         if isinstance(doc, str):
             doc = frappe.get_doc("Sales Invoice", doc)
         
+        # Convertir amount a float y validar
+        amount = float(amount)
         validate_payment_amount(amount, currency)
         
         # Verificar que el usuario tenga permisos
@@ -166,15 +168,16 @@ def create_payment_request_with_usp(doc, amount, currency="USD"):
         # Obtener opciones válidas para payment_request_type
         payment_request_type = get_valid_payment_request_type()
         
+        # Crear Payment Request
         payment_request = frappe.get_doc({
             "doctype": "Payment Request",
-            "payment_request_type": payment_request_type,  # Usar valor dinámico
+            "payment_request_type": payment_request_type,
             "party_type": "Customer",
             "party": doc.customer,
             "reference_doctype": doc.doctype,
             "reference_name": doc.name,
             "currency": currency,
-            "grand_total": flt(amount),
+            "grand_total": amount,
             "usp_payment_method": 1,
             "payment_gateway": "USP Gateway",
             "email_to": doc.contact_email or ""
@@ -182,6 +185,21 @@ def create_payment_request_with_usp(doc, amount, currency="USD"):
         
         payment_request.insert(ignore_permissions=True)
         payment_request.submit()
+        
+        # NUEVO: Preparar datos para la URL de pago
+        payment_url_data = {
+            "name": payment_request.name,
+            "amount": amount,
+            "currency": currency,
+            "customer": doc.customer,
+            "reference_doctype": doc.doctype,
+            "reference_docname": doc.name,
+            "party": doc.customer,
+            "grand_total": amount
+        }
+        
+        # Agregar datos de la factura al Payment Request
+        payment_request.payment_url_data = payment_url_data
         
         return payment_request.as_dict()
         
@@ -209,6 +227,29 @@ def get_webhook_url():
     """Obtiene la URL del webhook para USP"""
     site_url = get_url()
     return f"{site_url}/api/method/gateway_usp.api.payment_controller.webhook_handler"
+
+@frappe.whitelist()
+def debug_payment_data():
+    """Función para depurar datos de pago"""
+    try:
+        # Obtener datos de la sesión actual
+        debug_info = {
+            "user": frappe.session.user,
+            "route_options": frappe.local.form_dict,
+            "timestamp": frappe.utils.now(),
+            "session_data": frappe.session
+        }
+        
+        frappe.log_error(
+            json.dumps(debug_info, indent=2),
+            "USP Payment Debug Info"
+        )
+        
+        return debug_info
+        
+    except Exception as e:
+        frappe.log_error(f"Error en debug_payment_data: {str(e)}")
+        return {"error": str(e)}
 
 def log_usp_transaction(transaction_type, data, response=None, error=None):
     """Log de transacciones USP para auditoría"""

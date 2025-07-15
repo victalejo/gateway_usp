@@ -63,7 +63,7 @@ def process_payment(payment_data):
 @frappe.whitelist()
 def process_payment_with_new_card(payment_data):
     """
-    Procesa un pago con una nueva tarjeta de crédito
+    Procesa un pago con una nueva tarjeta de crédito - MEJORADO
     
     Args:
         payment_data: Datos del pago incluyendo información de la nueva tarjeta
@@ -79,6 +79,24 @@ def process_payment_with_new_card(payment_data):
             if not payment_data.get(field):
                 frappe.throw(f"Campo requerido faltante: {field}")
         
+        # Validar amount específicamente
+        amount = payment_data.get('amount')
+        if not amount:
+            frappe.throw("El campo 'amount' es requerido")
+        
+        try:
+            amount = float(amount)
+            if amount <= 0:
+                frappe.throw("El monto debe ser mayor a cero")
+        except (ValueError, TypeError):
+            frappe.throw(f"Monto inválido: {amount}")
+        
+        # Log para debug
+        frappe.log_error(
+            f"Procesando pago USP - Amount: {amount}, Customer: {payment_data.get('customer')}, Currency: {payment_data.get('currency', 'USD')}",
+            "USP Payment Debug"
+        )
+        
         card_data = payment_data.get('card_data')
         card_required_fields = ['card_number', 'cardholder_name', 'expiry_month', 'expiry_year', 'cvv']
         for field in card_required_fields:
@@ -87,7 +105,7 @@ def process_payment_with_new_card(payment_data):
         
         # Validar monto
         from gateway_usp.utils.payment_utils import validate_payment_amount
-        validate_payment_amount(payment_data.get('amount'), payment_data.get('currency', 'USD'))
+        validate_payment_amount(amount, payment_data.get('currency', 'USD'))
         
         # Obtener SDK configurado
         sdk = get_xpresspago_sdk()
@@ -112,7 +130,7 @@ def process_payment_with_new_card(payment_data):
         
         # 3. Procesar el pago
         transaction_response = transaction_manager.process_sale({
-            "amount": flt(payment_data.get("amount")),
+            "amount": flt(amount),
             "customer_id": customer_token,
             "card_token": card_token,
             "order_tracking_number": payment_data.get("reference_docname")
@@ -123,7 +141,7 @@ def process_payment_with_new_card(payment_data):
             "doctype": "USP Transaction",
             "reference_doctype": payment_data.get("reference_doctype"),
             "reference_docname": payment_data.get("reference_docname"),
-            "amount": flt(payment_data.get("amount")),
+            "amount": flt(amount),
             "currency": payment_data.get("currency", "USD"),
             "customer": payment_data.get("customer"),
             "transaction_id": transaction_response.get("TransactionId"),
@@ -140,7 +158,7 @@ def process_payment_with_new_card(payment_data):
             "new_card_payment",
             {
                 "customer": payment_data.get("customer"),
-                "amount": payment_data.get("amount"),
+                "amount": amount,
                 "card_last_four": card_data.get("card_number")[-4:]
             },
             transaction_response
