@@ -39,26 +39,42 @@ def get_customer_usp_data(customer_name):
         }
     }
 
+@frappe.whitelist()
 def create_payment_request_with_usp(doc, amount, currency="USD"):
     """Crea un Payment Request con USP habilitado"""
-    payment_request = frappe.get_doc({
-        "doctype": "Payment Request",
-        "payment_request_type": "Inbound",
-        "party_type": "Customer",
-        "party": doc.customer,
-        "reference_doctype": doc.doctype,
-        "reference_name": doc.name,
-        "currency": currency,
-        "grand_total": flt(amount),
-        "usp_payment_method": 1,
-        "payment_gateway": "USP Gateway",
-        "email_to": doc.contact_email
-    })
-    
-    payment_request.insert()
-    payment_request.submit()
-    
-    return payment_request
+    try:
+        # Validar parámetros
+        if isinstance(doc, str):
+            doc = frappe.get_doc("Sales Invoice", doc)
+        
+        validate_payment_amount(amount, currency)
+        
+        # Verificar que el usuario tenga permisos
+        if not frappe.has_permission("Payment Request", "create"):
+            frappe.throw("No tienes permisos para crear Payment Request")
+        
+        payment_request = frappe.get_doc({
+            "doctype": "Payment Request",
+            "payment_request_type": "Inbound",
+            "party_type": "Customer",
+            "party": doc.customer,
+            "reference_doctype": doc.doctype,
+            "reference_name": doc.name,
+            "currency": currency,
+            "grand_total": flt(amount),
+            "usp_payment_method": 1,
+            "payment_gateway": "USP Gateway",
+            "email_to": doc.contact_email or ""
+        })
+        
+        payment_request.insert(ignore_permissions=True)
+        payment_request.submit()
+        
+        return payment_request.as_dict()
+        
+    except Exception as e:
+        frappe.log_error(f"Error creando Payment Request USP: {str(e)}")
+        frappe.throw(f"Error creando Payment Request: {str(e)}")
 
 def format_usp_response(response_data):
     """Formatea la respuesta de USP para mostrar al usuario"""
@@ -96,3 +112,45 @@ def log_usp_transaction(transaction_type, data, response=None, error=None):
         message=json.dumps(log_entry, indent=2),
         title=f"USP Transaction - {transaction_type}"
     )
+
+# Función helper para obtener settings de USP
+@frappe.whitelist()
+def get_usp_settings():
+    """Obtiene las configuraciones de USP Gateway"""
+    try:
+        settings = frappe.get_single("USP Payment Gateway Settings")
+        return {
+            "is_enabled": settings.is_enabled,
+            "environment": settings.environment,
+            "default_currency": settings.default_currency,
+            "auto_capture": settings.auto_capture
+        }
+    except Exception as e:
+        frappe.log_error(f"Error obteniendo settings USP: {str(e)}")
+        return {"is_enabled": False}
+
+# Función para validar que Payment Request puede usar USP
+@frappe.whitelist()
+def validate_payment_request_for_usp(payment_request_name):
+    """Valida que un Payment Request pueda usar USP"""
+    try:
+        pr = frappe.get_doc("Payment Request", payment_request_name)
+        
+        # Verificar que esté pendiente
+        if pr.status != "Requested":
+            return {"valid": False, "message": "Payment Request no está pendiente"}
+        
+        # Verificar que tenga customer
+        if not pr.party:
+            return {"valid": False, "message": "Payment Request no tiene customer"}
+        
+        # Verificar que USP esté habilitado
+        settings = frappe.get_single("USP Payment Gateway Settings")
+        if not settings.is_enabled:
+            return {"valid": False, "message": "USP Gateway no está habilitado"}
+        
+        return {"valid": True, "message": "OK"}
+        
+    except Exception as e:
+        frappe.log_error(f"Error validando Payment Request: {str(e)}")
+        return {"valid": False, "message": str(e)}

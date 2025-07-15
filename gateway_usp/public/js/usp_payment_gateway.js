@@ -284,7 +284,7 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
                         frappe.call({
                             method: "gateway_usp.utils.payment_utils.create_payment_request_with_usp",
                             args: {
-                                doc: frm.doc,
+                                doc: frm.doc.name,  // Enviar solo el nombre del documento
                                 amount: frm.doc.outstanding_amount,
                                 currency: frm.doc.currency
                             },
@@ -292,6 +292,13 @@ if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
                                 if (r.message) {
                                     frappe.set_route('Form', 'Payment Request', r.message.name);
                                 }
+                            },
+                            error: function(r) {
+                                frappe.msgprint({
+                                    title: __("Error"),
+                                    message: r.message || __("Error creando Payment Request"),
+                                    indicator: "red"
+                                });
                             }
                         });
                     });
